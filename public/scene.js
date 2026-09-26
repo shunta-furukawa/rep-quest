@@ -6,7 +6,7 @@ export function createScene() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMappingExposure = 1.08;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const canvas = renderer.domElement;
@@ -16,8 +16,8 @@ export function createScene() {
   const world = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-3.8, 3.8, 2.6, -2.6, .1, 60);
   camera.position.set(5, 4.5, 8); camera.lookAt(0, 1.2, 0);
-  world.add(new THREE.HemisphereLight(0xa7d6e2, 0x27302d, 2.1));
-  const sunlight = new THREE.DirectionalLight(0xffdcab, 3.4);
+  world.add(new THREE.HemisphereLight(0xa7d6e2, 0x202c35, 1.45));
+  const sunlight = new THREE.DirectionalLight(0xffd09a, 3.2);
   sunlight.position.set(-3, 7, 4); sunlight.castShadow = true;
   sunlight.shadow.mapSize.set(512, 512);
   Object.assign(sunlight.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: .1, far: 20 });
@@ -91,7 +91,7 @@ export function createScene() {
   let yaw = .18;
   const body = new THREE.Group(); body.position.y = 1.04; hero.add(body);
   const hairMat = new THREE.MeshStandardMaterial({ color: '#302824', roughness: .95 });
-  const tunic = material('#377879'), leather = material('#704731'), trim = material('#c9a46b');
+  const tunic = material('#235765'), leather = material('#704731'), trim = material('#c9a46b');
   const steel = new THREE.MeshStandardMaterial({ color: '#9babaf', roughness: .50, metalness: .65 });
   const bladeMat = new THREE.MeshStandardMaterial({ color: '#92744a', roughness: .6, metalness: .1 });
   box(body, [0, .14, 0], [.70, .78, .43], '', { mat: tunic });

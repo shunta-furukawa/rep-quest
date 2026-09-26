@@ -76,7 +76,9 @@ async function mountScene() {
     scene.setMode(view === 'workout' && session?.state === 'running' && session.mode === 'plank' ? 'guard' : 'idle');
     if (view === 'result') scene.play('celebrate');
   } else {
-    currentMount.textContent = '✦';
+    const emblem = document.createElement('img'); emblem.src = '/art/crest.svg'; emblem.width = 90; emblem.height = 110; emblem.alt = '';
+    const note = document.createElement('small'); note.textContent = 'この環境では3D表示を利用できません';
+    currentMount.replaceChildren(emblem, note);
     currentMount.classList.add('scene-fallback');
     currentMount.setAttribute('aria-label', '3D表示を利用できません。運動の計測と記録はそのまま使えます。');
   }
@@ -119,7 +121,7 @@ function renderSlots() {
     const name = document.createElement('strong'); name.textContent = slot ? slot.name : '新しい冒険をはじめる';
     const details = document.createElement('span');
     details.textContent = slot ? `Lv. ${progress(slot.xp).level} · ${slot.xp.toLocaleString()} XP · ${slot.sets} セット` : '名前と髪色を決めて、自分の分身をつくろう。';
-    const gem = document.createElement('i'); gem.className = 'slot-gem'; gem.style.setProperty('--hair', slot?.hair || '#567078'); gem.textContent = slot ? '✦' : '+';
+    const gem = document.createElement('i'); gem.className = 'slot-gem'; gem.style.setProperty('--hair', slot?.hair || '#567078'); const crest = document.createElement('img'); crest.src = slot ? '/art/crest.svg' : '/art/compass.svg'; crest.width = 40; crest.height = 40; crest.alt = ''; gem.append(crest);
     const copy = document.createElement('div'); copy.append(number, name, details); open.append(gem, copy);
     open.onclick = () => {
       if (!slot || !slot.configured) return editCharacter(index);
