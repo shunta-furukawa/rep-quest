@@ -5,7 +5,7 @@ import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, r
 import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
-import { STORAGE_KEY, LEGACY_KEY, HAIR_COLORS, emptyStore, createCharacter, newActive, creditAmount, commitActive, migrateLegacy, validateStore, monthCells } from './storage.js';
+import { STORAGE_KEY, LEGACY_KEY, HAIR_COLORS, emptyStore, createCharacter, deleteSlot, newActive, creditAmount, commitActive, migrateLegacy, validateStore, monthCells } from './storage.js';
 
 const $ = id => document.getElementById(id);
 const battle = createBattle($('battle-arena'));
@@ -150,6 +150,10 @@ function renderSlots() {
       const edit = document.createElement('button'); edit.className = 'text-btn slot-edit'; edit.textContent = '名前・髪色を変更';
       edit.setAttribute('aria-label', `スロット${index + 1}の名前・髪色を変更`); edit.onclick = () => editCharacter(index); card.append(edit);
     }
+    if (slot) {
+      const remove = document.createElement('button'); remove.className = 'text-btn slot-delete'; remove.textContent = 'このセーブを削除';
+      remove.setAttribute('aria-label', `スロット${index + 1}のセーブを削除`); remove.onclick = () => askDelete(index); card.append(remove);
+    }
     $('slot-list').append(card);
   });
   updateSound();
@@ -185,6 +189,28 @@ $('character-form').onsubmit = event => {
   else store.slots[editorIndex] = createCharacter(name, editorHair);
   store.selected = editorIndex; data = store.slots[editorIndex]; ensureJobs(data); data.job=editorJob; save();
   render(); show('home');
+};
+let deleteIndex = null;
+function askDelete(index) {
+  const slot = store.slots[index];
+  if (!slot) return;
+  if (writeBlocked) return toast('保存を再開するには、この画面を再読み込みしてください。');
+  deleteIndex = index;
+  $('delete-detail').textContent = `スロット${index + 1}「${slot.name}」の成長・運動記録・図鑑をすべて削除します。元に戻せません。残したい場合は、先に設定からバックアップしてください。`;
+  $('delete-name').value = ''; $('delete-name').placeholder = slot.name; $('delete-confirm').disabled = true;
+  $('delete-dialog').showModal();
+}
+$('delete-name').oninput = () => { $('delete-confirm').disabled = $('delete-name').value.trim() !== store.slots[deleteIndex]?.name; };
+$('delete-cancel').onclick = () => $('delete-dialog').close();
+$('delete-form').onsubmit = event => {
+  event.preventDefault();
+  const slot = store.slots[deleteIndex];
+  if (!slot || writeBlocked || $('delete-name').value.trim() !== slot.name) return;
+  deleteSlot(store, deleteIndex);
+  if (data === slot) data = null;
+  $('delete-dialog').close();
+  if (save()) toast(`スロット${deleteIndex + 1}のセーブを削除しました。`);
+  renderSlots(); show('slots');
 };
 $('creator-back').onclick = () => { renderSlots(); show('slots'); };
 $('switch-slot').onclick = () => { renderSlots(); show('slots'); };
