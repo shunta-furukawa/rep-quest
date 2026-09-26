@@ -3,14 +3,27 @@ import { grantJobXp, validJob } from './progression.js';
 
 // Per-mode bosses, personal bests, rested XP, a daily request and drops.
 // Bonus XP is recorded per day as `bonus`, so daily and job totals stay consistent.
-export const BOSSES = [
-  { sprite: 'slime', name: 'ルーンスライム', drop: 'ルーンゼリー' },
-  { sprite: 'bat', name: '夜羽のコウモリ', drop: '夜羽の羽根' },
-  { sprite: 'golem', name: '苔石のゴーレム', drop: '苔むした核' },
+export const FAMILIES = ['slime', 'bat', 'golem'];
+// Each region has its own variant of every family: [name, drop, CSS filter].
+// Filters differ per family because the base sprites start from different hues.
+const VARIANTS = [
+  { slime: ['ルーンスライム', 'ルーンゼリー', ''], bat: ['夜羽のコウモリ', '夜羽の羽根', ''], golem: ['苔石のゴーレム', '苔むした核', ''] },
+  { slime: ['そよ風スライム', '翠のゼリー', 'hue-rotate(-75deg) saturate(1.2)'], bat: ['疾風のコウモリ', '疾風の羽根', 'hue-rotate(190deg) saturate(1.2)'], golem: ['翠玉のゴーレム', '翠玉のかけら', 'hue-rotate(70deg) saturate(1.3)'] },
+  { slime: ['氷霧スライム', '氷霧のしずく', 'hue-rotate(25deg) saturate(.55) brightness(1.25)'], bat: ['霧氷のコウモリ', '霧氷の羽根', 'hue-rotate(-60deg) saturate(.6) brightness(1.35)'], golem: ['氷河のゴーレム', '氷河の核', 'hue-rotate(150deg) saturate(.6) brightness(1.2)'] },
+  { slime: ['星屑スライム', '星屑のゼリー', 'hue-rotate(80deg) saturate(1.3)'], bat: ['遺跡のコウモリ', '古びた羽根', 'hue-rotate(30deg) saturate(1.6)'], golem: ['紫晶のゴーレム', '紫晶の核', 'hue-rotate(210deg) saturate(1.3)'] },
+  { slime: ['溶岩スライム', '溶岩のしずく', 'hue-rotate(170deg) saturate(2)'], bat: ['火焔のコウモリ', '火焔の羽根', 'hue-rotate(75deg) saturate(1.6)'], golem: ['紅玉のゴーレム', '紅玉の核', 'hue-rotate(-75deg) saturate(2)'] },
+  { slime: ['暁のスライム', '暁のゼリー', 'hue-rotate(200deg) saturate(1.1) brightness(1.2)'], bat: ['暁翼のコウモリ', '暁の羽根', 'hue-rotate(130deg) saturate(1.2) brightness(1.4)'], golem: ['曙光のゴーレム', '曙光の核', 'hue-rotate(-30deg) saturate(1.6) brightness(1.1)'] },
 ];
+const GOLDEN = { slime: ['黄金スライム', '黄金のゼリー'], bat: ['黄金のコウモリ', '黄金の羽根'], golem: ['黄金のゴーレム', '黄金の核'] };
+const GOLD_FILTER = 'sepia(1) saturate(3.5) hue-rotate(-12deg) brightness(1.15) drop-shadow(0 0 6px #ffd76a)';
+export function monster(family, element = 0, rare = false) {
+  const [name, drop, filter] = rare ? [...GOLDEN[family], GOLD_FILTER] : VARIANTS[element][family];
+  return { id: `${family}-${rare ? 'rare' : element}`, sprite: family, name, drop, filter, rare };
+}
+export const BESTIARY = [...VARIANTS.flatMap((_, e) => FAMILIES.map(f => monster(f, e))), ...FAMILIES.map(f => monster(f, 0, true))];
 export const RARE_DROP = '星のかけら';
 export const TUNING = { pushup: { min: 5, step: 1, quest: 10 }, squat: { min: 8, step: 1, quest: 15 }, plank: { min: 20, step: 5, quest: 30 } };
-export const BONUS = { boss: 50, best: 30, quest: 100, restPerDay: 100, restCap: 300, rareChance: 0.03 };
+export const BONUS = { boss: 50, best: 30, quest: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };
 export const CHAPTER_BOSSES = 3;
 export const REGIONS = [
   ['はじまりの森', '森の奥へ、一歩ずつ。'], ['風渡りの高原', '風を背に、次の場所へ。'], ['霧の湖畔', '見えない先も、進めば晴れる。'],
@@ -26,8 +39,8 @@ function hash(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.co
 const previous = (slot, mode, except) => slot.history.find(r => r !== except && r.mode === mode);
 
 export function bossOf(slot, mode) {
-  const b = slot.bosses[mode], foe = BOSSES[b.count % BOSSES.length];
-  return { ...foe, level: b.count + 1, hp: b.hp, max: b.max };
+  const b = slot.bosses[mode], foe = monster(FAMILIES[b.count % FAMILIES.length], b.element, b.rare);
+  return { ...foe, level: b.count + 1, hp: b.hp, max: b.max, isNew: !slot.dex?.[foe.id] };
 }
 export function makeQuest(slot, day) {
   const mode = KEYS[hash(day + slot.createdAt) % KEYS.length], t = TUNING[mode];
@@ -51,6 +64,12 @@ export function ensureMotivation(slot, today = localDate(), except = null) {
     const hp = Math.max(TUNING[m].min, (previous(slot, m, except)?.amount || 0) + TUNING[m].step);
     slot.bosses[m] = { max: hp, hp, count: 0 };
   }
+  // Earlier saves only knew the forest variants; a missing element means the boss was spawned there.
+  for (const m of KEYS) { slot.bosses[m].element ??= chapterOf(slot).region; slot.bosses[m].rare ??= false; }
+  if (!slot.dex) {
+    slot.dex = {};
+    for (const m of KEYS) for (let i = 0; i < slot.bosses[m].count; i++) { const id = monster(FAMILIES[i % FAMILIES.length]).id; slot.dex[id] = (slot.dex[id] || 0) + 1; }
+  }
   slot.items ??= {};
   slot.rest ??= { pool: 0, day: Object.keys(slot.daily).filter(k => k <= today).sort().at(-1) ?? today };
   accrueRest(slot, today);
@@ -69,7 +88,7 @@ export const bossDefeats = slot => KEYS.reduce((n, m) => n + (slot.bosses?.[m]?.
 export function chapterOf(slot) {
   const total = bossDefeats(slot), chapter = Math.floor(total / CHAPTER_BOSSES), depth = Math.floor(chapter / REGIONS.length);
   const [name, line] = REGIONS[chapter % REGIONS.length];
-  return { chapter, progress: total % CHAPTER_BOSSES, name: depth ? `${name} · 深層${depth}` : name, line };
+  return { chapter, region: chapter % REGIONS.length, progress: total % CHAPTER_BOSSES, name: depth ? `${name} · 深層${depth}` : name, line };
 }
 // Settle a committed history row: boss damage, bests, rested XP, daily request and drops.
 export function resolveSet(slot, row, rng = Math.random) {
@@ -81,14 +100,22 @@ export function resolveSet(slot, row, rng = Math.random) {
   const before = chapterOf(slot).chapter, prev = previous(slot, mode, row)?.amount;
 
   const boss = slot.bosses[mode], foe = bossOf(slot, mode);
-  report.boss = { name: foe.name, sprite: foe.sprite, level: foe.level, max: boss.max, hp: boss.hp };
+  report.boss = { id: foe.id, name: foe.name, sprite: foe.sprite, rare: foe.rare, level: foe.level, max: boss.max, hp: boss.hp };
   if (amount >= boss.hp) {
     const over = amount - boss.hp, next = Math.max(boss.max, amount) + t.step;
     Object.assign(boss, { max: next, hp: next, count: boss.count + 1 });
     report.boss.defeated = true; row.boss = true;
     add(BONUS.boss, `${foe.name} Lv.${foe.level}を撃破！`);
+    if (foe.rare) { add(BONUS.rare, 'レア個体の撃破ボーナス'); report.drops.push(RARE_DROP); }
     if (over) add(Math.floor(over * MODES[mode].xp / 2), `オーバーキル +${over}${unit}`);
     report.drops.push(foe.drop);
+    if (!slot.dex[foe.id]) { report.boss.discovered = true; add(0, `図鑑に登録：${foe.name}（${Object.keys(slot.dex).length + 1}/${BESTIARY.length}）`); }
+    slot.dex[foe.id] = (slot.dex[foe.id] || 0) + 1;
+    // The next boss comes from the region reached after this defeat; a few are golden.
+    Object.assign(boss, { element: chapterOf(slot).region, rare: rng() < BONUS.rareBoss });
+    const upcoming = bossOf(slot, mode);
+    report.next = upcoming;
+    if (upcoming.rare) add(0, `次の相手はレア個体：${upcoming.name}が現れた！`);
   } else {
     boss.hp -= amount;
     report.boss.remaining = boss.hp;
@@ -133,8 +160,13 @@ export function validateMotivation(s) {
   if (s.best !== undefined && (!record(s.best) || !KEYS.every(m => integer(s.best[m], 1e7)))) bad();
   if (s.bosses !== undefined) {
     if (!record(s.bosses)) bad();
-    for (const m of KEYS) { const b = s.bosses[m]; if (!record(b) || !integer(b.max, 1e7) || !integer(b.hp, b.max) || b.hp < 1 || !integer(b.count, 1e7)) bad(); }
+    for (const m of KEYS) {
+      const b = s.bosses[m];
+      if (!record(b) || !integer(b.max, 1e7) || !integer(b.hp, b.max) || b.hp < 1 || !integer(b.count, 1e7)) bad();
+      if ((b.element !== undefined && !integer(b.element, REGIONS.length - 1)) || (b.rare !== undefined && typeof b.rare !== 'boolean')) bad();
+    }
   }
+  if (s.dex !== undefined && (!record(s.dex) || Object.entries(s.dex).some(([k, v]) => !BESTIARY.some(e => e.id === k) || !integer(v, 1e7)))) bad();
   if (s.rest !== undefined && (!record(s.rest) || !integer(s.rest.pool, BONUS.restCap) || !dateKey(s.rest.day))) bad();
   if (s.quest !== undefined && (!record(s.quest) || !dateKey(s.quest.day) || !MODES[s.quest.mode] || !integer(s.quest.target, 1e7) || typeof s.quest.done !== 'boolean')) bad();
   if (s.items !== undefined && (!record(s.items) || Object.entries(s.items).some(([k, v]) => k.length > 20 || !integer(v, 1e7)))) bad();

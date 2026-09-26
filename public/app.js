@@ -1,6 +1,6 @@
 import { createAppUpdates } from './updates.js';
 import { bossState, createBattle, defeats } from './battle.js';
-import { BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from './motivation.js';
+import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from './motivation.js';
 import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -191,9 +191,9 @@ $('slots-import').onclick = () => $('import').click();
 
 function render() {
   if (!data) return;
-  const snapshot = JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items]);
+  const snapshot = JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items, data.dex]);
   ensureMotivation(data);
-  if (JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items]) !== snapshot) save();
+  if (JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items, data.dex]) !== snapshot) save();
   const g = growth(data), p = progress(g.xp);
   $('character-label').textContent = data.name;
   $('slot-label').textContent = `SLOT 0${store.selected + 1}`;
@@ -214,12 +214,21 @@ function render() {
   $('rest-note').textContent = data.rest.pool ? `休息ボーナス ${data.rest.pool}XP（XP2倍）` : '自分のペースで、1セットから';
   for (const el of document.querySelectorAll('[data-boss]')) {
     const b = bossOf(data, el.dataset.boss);
-    el.textContent = `Lv.${b.level} ${b.name} · HP ${b.hp}/${b.max}${b.hp < b.max ? ' 持ち越し' : ''}`;
+    el.textContent = `${b.rare ? '★' : ''}${b.isNew ? 'NEW ' : ''}Lv.${b.level} ${b.name} · HP ${b.hp}/${b.max}${b.hp < b.max ? ' 持ち越し' : ''}`;
   }
   for (const b of document.querySelectorAll('[data-mode]')) b.classList.toggle('is-request', b.dataset.mode === q.mode && !q.done);
   $('best-stats').replaceChildren(...Object.entries(MODES).map(([m, info]) => {
     const d = document.createElement('div'), label = document.createElement('small'), value = document.createElement('strong');
     label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
+  }));
+  $('dex-count').textContent = `${BESTIARY.filter(m => data.dex[m.id]).length} / ${BESTIARY.length} 種`;
+  $('bestiary').replaceChildren(...BESTIARY.map(m => {
+    const seen = data.dex[m.id], cell = document.createElement('div'), img = document.createElement('img'), label = document.createElement('small');
+    cell.className = `dex-entry${seen ? '' : ' unseen'}${m.rare ? ' rare' : ''}`;
+    img.src = `/sprites/${m.sprite}.webp`; img.alt = ''; img.width = 56; img.height = 56;
+    if (seen) img.style.setProperty('--variant', m.filter || 'brightness(1)');
+    label.textContent = seen ? `${m.name} ×${seen}` : m.rare ? '★ ？？？' : '？？？';
+    cell.append(img, label); return cell;
   }));
   const items = Object.entries(data.items);
   $('item-stats').textContent = items.length ? `戦利品：${items.map(([k, n]) => `${k} ×${n}`).join('、')}` : 'ボスを倒すと戦利品が手に入ります。まれに星のかけらも。';

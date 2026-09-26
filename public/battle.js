@@ -23,7 +23,9 @@ export function createBattle(arena) {
       job=nextJob;clearTimeout(timer);effects.replaceChildren();
       feedback.textContent='';arena.dataset.job=job;enemy.classList.remove('arriving','hit','vanquished');
       enemy.src=`/sprites/${boss.sprite}.webp`;
-      name.textContent=`BOSS · ${boss.name} Lv.${boss.level}`;
+      enemy.style.setProperty('--variant',boss.filter||'brightness(1)');
+      arena.classList.toggle('rare',Boolean(boss.rare));
+      name.textContent=`${boss.rare?'★ RARE':'BOSS'} · ${boss.name} Lv.${boss.level}${boss.isNew?' · NEW':''}`;
     },
     strike({ crit=false, defeated=false, overkill=0 }={}) {
       clearTimeout(timer);
