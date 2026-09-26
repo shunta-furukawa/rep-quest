@@ -57,3 +57,8 @@ Subject: A treasure chest mimic monster facing LEFT, teal-painted wooden chest w
 dragon.webp
 Use case: stylized-concept. Production REP QUEST enemy sprite matching refined 2D JRPG pixel art: crisp pixel clusters, rich but limited colors, dark navy outlines, tiny antique gold accents. Exactly ONE whole creature, facing LEFT toward the hero, idle battle pose. Transparent background. No text, no scenery, no floor, no ground shadow, no other creatures. Full body and all extremities visible with clear transparent margins. One strong dominant TEAL hue on the main body/costume so CSS hue-rotate variants are readable. Hand-crafted pixel art rather than smooth painting or voxel 3D. Readable after nearest-neighbor downscale to 160px wide. The bottom-most feet/body establish a common contact baseline.
 Subject: A small young dragon facing LEFT in side three-quarter view, teal scales, pale underbelly, two folded batlike wings, small gold horns, snout LEFT and curving tail RIGHT, four little legs with all feet visible. Mature detailed fantasy pixel sprite, not cute chibi. Compact dragon silhouette.
+
+Browser palette review: all seven rows rendered with CSS filters. The old star-region bat
+was magenta, so it was adjusted from +30deg to -15deg with saturation 1.15 and brightness 1.2
+to match the purple region. New families use individually tuned saturation/brightness values.
+The shared bestiary renderer was checked at 320, 375 and 390px outer widths.
