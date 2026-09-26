@@ -20,3 +20,25 @@ fits within the maskable icon safe area. No text or external font request.
 
 UI frames use nine-slice SVG border images to preserve corners at any width.
 Exercise icons are SVG pictograms, not platform-dependent emoji.
+
+
+2026-09-26 — Image-generated logo replacement
+Both the title and app emblem now use the built-in image generation tool.
+Active title: public/art/wordmark-generated.webp (1200 x 282, transparent).
+Active PWA assets: public/icon-generated-{180,192,512}.png.
+Earlier SVG logo/icon are retained as historical assets, not used by the UI.
+Only transparent-margin trimming, resizing and encoding were applied after generation.
+
+Title prompt:
+Design a premium medieval fantasy RPG title logo reading exactly REP QUEST,
+single horizontal wordmark, genuinely transparent background. Custom sculpted
+Roman fantasy lettering, dramatic R and Q, sharply flared serifs, aged warm
+gold metal, engraved bevels and bronze edges. Q is a gilded portal ring with
+a luminous cyan four-point compass/star/sword rune and sweeping gold tail.
+Readable at 280px on a navy mobile header. No other words, scenery or borders.
+
+Icon prompt:
+Use the generated title's Q as identity reference. Only the sculpted gold Q
+portal ring and luminous cyan star, deep navy square background, no other
+letters or borders. Same engraved gold and bronze edges, sweeping tail.
+Central emblem with generous maskable padding; readable at 60px.

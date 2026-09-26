@@ -1,5 +1,5 @@
-const CACHE = 'rep-quest-v3.0';
-const FILES = ['/', '/index.html', '/style.css', '/app.js', '/engine.js', '/storage.js', '/scene.js', '/vendor/three.module.js', '/vendor/three.core.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/theme.css', '/icon-180.png', '/art/book.svg', '/art/compass.svg', '/art/crest.svg', '/art/guild-dusk.webp', '/art/ornate-frame.svg', '/art/plank.svg', '/art/pushup.svg', '/art/squat.svg', '/art/wordmark.svg'];
+const CACHE = 'rep-quest-v3.1';
+const FILES = ['/', '/index.html', '/style.css', '/app.js', '/engine.js', '/storage.js', '/scene.js', '/vendor/three.module.js', '/vendor/three.core.js', '/manifest.webmanifest', '/icon-generated-192.png', '/icon-generated-512.png', '/theme.css', '/icon-generated-180.png', '/art/book.svg', '/art/compass.svg', '/art/crest.svg', '/art/guild-dusk.webp', '/art/ornate-frame.svg', '/art/plank.svg', '/art/pushup.svg', '/art/squat.svg', '/art/wordmark-generated.webp'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });
