@@ -1,3 +1,4 @@
+import { renderBestiary } from './bestiary.js';
 import { createAppUpdates } from './updates.js';
 import { bossState, createBattle, defeats } from './battle.js';
 import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from './motivation.js';
@@ -222,14 +223,7 @@ function render() {
     label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
   }));
   $('dex-count').textContent = `${BESTIARY.filter(m => data.dex[m.id]).length} / ${BESTIARY.length} 種`;
-  $('bestiary').replaceChildren(...BESTIARY.map(m => {
-    const seen = data.dex[m.id], cell = document.createElement('div'), img = document.createElement('img'), label = document.createElement('small');
-    cell.className = `dex-entry${seen ? '' : ' unseen'}${m.rare ? ' rare' : ''}`;
-    img.src = `/sprites/${m.sprite}.webp`; img.alt = ''; img.width = 56; img.height = 56;
-    if (seen) img.style.setProperty('--variant', m.filter || 'brightness(1)');
-    label.textContent = seen ? `${m.name} ×${seen}` : m.rare ? '★ ？？？' : '？？？';
-    cell.append(img, label); return cell;
-  }));
+  renderBestiary($('bestiary'), data.dex);
   const items = Object.entries(data.items);
   $('item-stats').textContent = items.length ? `戦利品：${items.map(([k, n]) => `${k} ×${n}`).join('、')}` : 'ボスを倒すと戦利品が手に入ります。まれに星のかけらも。';
   $('total-label').textContent = `${data.sets} セット達成`;

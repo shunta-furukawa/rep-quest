@@ -3,18 +3,37 @@ import { grantJobXp, validJob } from './progression.js';
 
 // Per-mode bosses, personal bests, rested XP, a daily request and drops.
 // Bonus XP is recorded per day as `bonus`, so daily and job totals stay consistent.
-export const FAMILIES = ['slime', 'bat', 'golem'];
+// Never expand this migration list: pre-v0.9 saves used count % 3.
+const LEGACY_FAMILIES = ['slime', 'bat', 'golem'];
+export const FAMILIES = [...LEGACY_FAMILIES, 'mushroom', 'wolf', 'skeleton', 'wisp', 'mimic', 'dragon'];
+// Native species have weight 8, visiting species weight 1 (80% / 20%).
+// Every variant remains obtainable; adding a family does not strand dex entries.
+const NATIVES = [
+  ['slime', 'mushroom', 'bat'], ['wolf', 'bat', 'golem'],
+  ['wisp', 'wolf', 'golem'], ['skeleton', 'mimic', 'wisp'],
+  ['dragon', 'golem', 'skeleton'], ['dragon', 'wisp', 'mimic'],
+];
+export const REGION_POOLS = NATIVES.map(native => [
+  ...native.map(family => ({ family, weight: 8 })),
+  ...FAMILIES.filter(f => !native.includes(f)).map(family => ({ family, weight: 1 })),
+]);
+export function chooseFamily(region, rng = Math.random) {
+  const pool = REGION_POOLS[region], total = pool.reduce((n, e) => n + e.weight, 0);
+  let roll = Math.max(0, Math.min(1, rng())) * total;
+  for (const entry of pool) { roll -= entry.weight; if (roll < 0) return entry.family; }
+  return pool.at(-1).family; // deterministic test RNGs may return exactly 1
+}
 // Each region has its own variant of every family: [name, drop, CSS filter].
 // Filters differ per family because the base sprites start from different hues.
 const VARIANTS = [
-  { slime: ['ルーンスライム', 'ルーンゼリー', ''], bat: ['夜羽のコウモリ', '夜羽の羽根', ''], golem: ['苔石のゴーレム', '苔むした核', ''] },
-  { slime: ['そよ風スライム', '翠のゼリー', 'hue-rotate(-75deg) saturate(1.2)'], bat: ['疾風のコウモリ', '疾風の羽根', 'hue-rotate(190deg) saturate(1.2)'], golem: ['翠玉のゴーレム', '翠玉のかけら', 'hue-rotate(70deg) saturate(1.3)'] },
-  { slime: ['氷霧スライム', '氷霧のしずく', 'hue-rotate(25deg) saturate(.55) brightness(1.25)'], bat: ['霧氷のコウモリ', '霧氷の羽根', 'hue-rotate(-60deg) saturate(.6) brightness(1.35)'], golem: ['氷河のゴーレム', '氷河の核', 'hue-rotate(150deg) saturate(.6) brightness(1.2)'] },
-  { slime: ['星屑スライム', '星屑のゼリー', 'hue-rotate(80deg) saturate(1.3)'], bat: ['遺跡のコウモリ', '古びた羽根', 'hue-rotate(30deg) saturate(1.6)'], golem: ['紫晶のゴーレム', '紫晶の核', 'hue-rotate(210deg) saturate(1.3)'] },
-  { slime: ['溶岩スライム', '溶岩のしずく', 'hue-rotate(170deg) saturate(2)'], bat: ['火焔のコウモリ', '火焔の羽根', 'hue-rotate(75deg) saturate(1.6)'], golem: ['紅玉のゴーレム', '紅玉の核', 'hue-rotate(-75deg) saturate(2)'] },
-  { slime: ['暁のスライム', '暁のゼリー', 'hue-rotate(200deg) saturate(1.1) brightness(1.2)'], bat: ['暁翼のコウモリ', '暁の羽根', 'hue-rotate(130deg) saturate(1.2) brightness(1.4)'], golem: ['曙光のゴーレム', '曙光の核', 'hue-rotate(-30deg) saturate(1.6) brightness(1.1)'] },
+  { slime: ['ルーンスライム', 'ルーンゼリー', ''], bat: ['夜羽のコウモリ', '夜羽の羽根', ''], golem: ['苔石のゴーレム', '苔むした核', ''], mushroom: ['藍傘のマタンゴ', '藍傘の胞子', ''], wolf: ['青鬣の狼', '青鬣の毛束', ''], skeleton: ['朽鎧の骸骨兵', '朽鎧の留め具', ''], wisp: ['迷い灯のウィスプ', '迷い灯の芯', ''], mimic: ['古箱のミミック', '古箱の錠前', ''], dragon: ['碧鱗の幼竜', '碧鱗のうろこ', ''] },
+  { slime: ['そよ風スライム', '翠のゼリー', 'hue-rotate(-75deg) saturate(1.2)'], bat: ['疾風のコウモリ', '疾風の羽根', 'hue-rotate(190deg) saturate(1.2)'], golem: ['翠玉のゴーレム', '翠玉のかけら', 'hue-rotate(70deg) saturate(1.3)'], mushroom: ['風踊りマタンゴ', '風踊りの菌糸', 'hue-rotate(-85deg) saturate(1.25)'], wolf: ['草原の疾走狼', '疾走狼の爪', 'hue-rotate(-85deg) saturate(1.45)'], skeleton: ['草笛の骸骨兵', '草笛の骨笛', 'hue-rotate(-85deg) saturate(1.2)'], wisp: ['風灯のウィスプ', '風灯の燐粉', 'hue-rotate(-80deg) saturate(1.1)'], mimic: ['旅箱のミミック', '旅箱の金具', 'hue-rotate(-85deg) saturate(1.45)'], dragon: ['疾風の幼竜', '疾風竜の翼膜', 'hue-rotate(-85deg) saturate(1.25)'] },
+  { slime: ['氷霧スライム', '氷霧のしずく', 'hue-rotate(25deg) saturate(.55) brightness(1.25)'], bat: ['霧氷のコウモリ', '霧氷の羽根', 'hue-rotate(-60deg) saturate(.6) brightness(1.35)'], golem: ['氷河のゴーレム', '氷河の核', 'hue-rotate(150deg) saturate(.6) brightness(1.2)'], mushroom: ['霜傘のマタンゴ', '霜傘の薄片', 'hue-rotate(15deg) saturate(.5) brightness(1.35)'], wolf: ['氷牙の狼', '氷牙の牙片', 'hue-rotate(15deg) saturate(.55) brightness(1.4)'], skeleton: ['凍冑の骸骨兵', '凍冑の破片', 'hue-rotate(15deg) saturate(.55) brightness(1.35)'], wisp: ['霧灯のウィスプ', '霧灯の結晶', 'hue-rotate(20deg) saturate(.4) brightness(1.25)'], mimic: ['氷櫃のミミック', '氷櫃の蝶番', 'hue-rotate(15deg) saturate(.55) brightness(1.5)'], dragon: ['氷晶の幼竜', '氷晶竜の小角', 'hue-rotate(15deg) saturate(.5) brightness(1.4)'] },
+  { slime: ['星屑スライム', '星屑のゼリー', 'hue-rotate(80deg) saturate(1.3)'], bat: ['遺跡のコウモリ', '古びた羽根', 'hue-rotate(30deg) saturate(1.6)'], golem: ['紫晶のゴーレム', '紫晶の核', 'hue-rotate(210deg) saturate(1.3)'], mushroom: ['夢見のマタンゴ', '夢見の胞子粉', 'hue-rotate(85deg) saturate(1.3)'], wolf: ['月影の狼', '月影の毛皮', 'hue-rotate(85deg) saturate(1.5)'], skeleton: ['星墓の骸骨兵', '星墓の紋章', 'hue-rotate(85deg) saturate(1.35)'], wisp: ['星魂のウィスプ', '星魂の残光', 'hue-rotate(90deg) saturate(1.25)'], mimic: ['魔書箱のミミック', '魔書箱の封蝋', 'hue-rotate(85deg) saturate(1.5)'], dragon: ['星詠みの幼竜', '星詠竜の鱗片', 'hue-rotate(85deg) saturate(1.4)'] },
+  { slime: ['溶岩スライム', '溶岩のしずく', 'hue-rotate(170deg) saturate(2)'], bat: ['火焔のコウモリ', '火焔の羽根', 'hue-rotate(75deg) saturate(1.6)'], golem: ['紅玉のゴーレム', '紅玉の核', 'hue-rotate(-75deg) saturate(2)'], mushroom: ['熾火のマタンゴ', '熾火の菌核', 'hue-rotate(165deg) saturate(1.8)'], wolf: ['業火の狼', '業火の牙', 'hue-rotate(165deg) saturate(2)'], skeleton: ['灼刃の骸骨兵', '灼刃の柄', 'hue-rotate(165deg) saturate(1.8)'], wisp: ['獄灯のウィスプ', '獄灯の火種', 'hue-rotate(170deg) saturate(1.8)'], mimic: ['炉箱のミミック', '炉箱の鋲', 'hue-rotate(165deg) saturate(2)'], dragon: ['火口の幼竜', '火口竜の炎袋', 'hue-rotate(165deg) saturate(1.9)'] },
+  { slime: ['暁のスライム', '暁のゼリー', 'hue-rotate(200deg) saturate(1.1) brightness(1.2)'], bat: ['暁翼のコウモリ', '暁の羽根', 'hue-rotate(130deg) saturate(1.2) brightness(1.4)'], golem: ['曙光のゴーレム', '曙光の核', 'hue-rotate(-30deg) saturate(1.6) brightness(1.1)'], mushroom: ['朝露のマタンゴ', '朝露の傘皮', 'hue-rotate(200deg) saturate(1.4) brightness(1.15)'], wolf: ['朝焼けの狼', '朝焼けの鬣', 'hue-rotate(200deg) saturate(1.6) brightness(1.2)'], skeleton: ['曙の近衛骨兵', '近衛の徽章', 'hue-rotate(200deg) saturate(1.4) brightness(1.15)'], wisp: ['黎明のウィスプ', '黎明の灯心', 'hue-rotate(200deg) saturate(1.2) brightness(1.1)'], mimic: ['日輪のミミック', '日輪の鍵', 'hue-rotate(200deg) saturate(1.6) brightness(1.25)'], dragon: ['天光の幼竜', '天光竜の尾棘', 'hue-rotate(200deg) saturate(1.4) brightness(1.2)'] },
 ];
-const GOLDEN = { slime: ['黄金スライム', '黄金のゼリー'], bat: ['黄金のコウモリ', '黄金の羽根'], golem: ['黄金のゴーレム', '黄金の核'] };
+const GOLDEN = { slime: ['黄金スライム', '黄金のゼリー'], bat: ['黄金のコウモリ', '黄金の羽根'], golem: ['黄金のゴーレム', '黄金の核'], mushroom: ['黄金のマタンゴ', '黄金の胞子'], wolf: ['黄金の狼', '黄金の牙'], skeleton: ['黄金の骸骨兵', '黄金の骨章'], wisp: ['黄金のウィスプ', '黄金の灯心'], mimic: ['黄金のミミック', '黄金の錠前'], dragon: ['黄金の幼竜', '黄金の竜鱗'] };
 const GOLD_FILTER = 'sepia(1) saturate(3.5) hue-rotate(-12deg) brightness(1.15) drop-shadow(0 0 6px #ffd76a)';
 export function monster(family, element = 0, rare = false) {
   const [name, drop, filter] = rare ? [...GOLDEN[family], GOLD_FILTER] : VARIANTS[element][family];
@@ -39,7 +58,7 @@ function hash(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.co
 const previous = (slot, mode, except) => slot.history.find(r => r !== except && r.mode === mode);
 
 export function bossOf(slot, mode) {
-  const b = slot.bosses[mode], foe = monster(FAMILIES[b.count % FAMILIES.length], b.element, b.rare);
+  const b = slot.bosses[mode], foe = monster(b.family ?? LEGACY_FAMILIES[b.count % 3], b.element, b.rare);
   return { ...foe, level: b.count + 1, hp: b.hp, max: b.max, isNew: !slot.dex?.[foe.id] };
 }
 export function makeQuest(slot, day) {
@@ -65,10 +84,13 @@ export function ensureMotivation(slot, today = localDate(), except = null) {
     slot.bosses[m] = { max: hp, hp, count: 0 };
   }
   // Earlier saves only knew the forest variants; a missing element means the boss was spawned there.
-  for (const m of KEYS) { slot.bosses[m].element ??= chapterOf(slot).region; slot.bosses[m].rare ??= false; }
+  for (const m of KEYS) { slot.bosses[m].family ??= LEGACY_FAMILIES[slot.bosses[m].count % 3]; slot.bosses[m].element ??= chapterOf(slot).region; slot.bosses[m].rare ??= false; }
   if (!slot.dex) {
     slot.dex = {};
-    for (const m of KEYS) for (let i = 0; i < slot.bosses[m].count; i++) { const id = monster(FAMILIES[i % FAMILIES.length]).id; slot.dex[id] = (slot.dex[id] || 0) + 1; }
+    for (const m of KEYS) LEGACY_FAMILIES.forEach((family, index) => {
+      const wins = Math.floor((slot.bosses[m].count + 2 - index) / 3);
+      if (wins) { const id = monster(family).id; slot.dex[id] = (slot.dex[id] || 0) + wins; }
+    });
   }
   slot.items ??= {};
   slot.rest ??= { pool: 0, day: Object.keys(slot.daily).filter(k => k <= today).sort().at(-1) ?? today };
@@ -112,7 +134,8 @@ export function resolveSet(slot, row, rng = Math.random) {
     if (!slot.dex[foe.id]) { report.boss.discovered = true; add(0, `図鑑に登録：${foe.name}（${Object.keys(slot.dex).length + 1}/${BESTIARY.length}）`); }
     slot.dex[foe.id] = (slot.dex[foe.id] || 0) + 1;
     // The next boss comes from the region reached after this defeat; a few are golden.
-    Object.assign(boss, { element: chapterOf(slot).region, rare: rng() < BONUS.rareBoss });
+    const element = chapterOf(slot).region, rare = rng() < BONUS.rareBoss;
+    Object.assign(boss, { element, rare, family: chooseFamily(element, rng) });
     const upcoming = bossOf(slot, mode);
     report.next = upcoming;
     if (upcoming.rare) add(0, `次の相手はレア個体：${upcoming.name}が現れた！`);
@@ -163,6 +186,7 @@ export function validateMotivation(s) {
     for (const m of KEYS) {
       const b = s.bosses[m];
       if (!record(b) || !integer(b.max, 1e7) || !integer(b.hp, b.max) || b.hp < 1 || !integer(b.count, 1e7)) bad();
+      if (b.family !== undefined && !FAMILIES.includes(b.family)) bad();
       if ((b.element !== undefined && !integer(b.element, REGIONS.length - 1)) || (b.rare !== undefined && typeof b.rare !== 'boolean')) bad();
     }
   }

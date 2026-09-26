@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
+import { BESTIARY, BONUS, CHAPTER_BOSSES, FAMILIES, REGION_POOLS, chooseFamily, validateMotivation, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
 import { bossState } from '../public/battle.js';
 import { progress } from '../public/engine.js';
 import { createCharacter, emptyStore, newActive, creditAmount, commitActive, validateStore } from '../public/storage.js';
@@ -16,13 +16,13 @@ const check = slot => { const store = emptyStore(); store.slots[0] = slot; store
 
 test('a boss that survives keeps its remaining HP for next time, then grows past the last effort', () => {
   const s = make(); ensureMotivation(s, '2026-09-01');
-  assert.deepEqual(s.bosses.pushup, { max: 5, hp: 5, count: 0, element: 0, rare: false });
+  assert.deepEqual(s.bosses.pushup, { max: 5, hp: 5, count: 0, element: 0, rare: false, family: 'slime' });
   let { report } = workout(s, 'pushup', 3, new Date(2026, 8, 1, 10));
   assert.equal(report.boss.defeated, undefined); assert.equal(s.bosses.pushup.hp, 2); assert.equal(report.bonus, 0);
   ({ report } = workout(s, 'pushup', 6, new Date(2026, 8, 1, 11)));
   assert.equal(report.boss.defeated, true);
   assert.equal(report.bonus, BONUS.boss + 20 + BONUS.best); // 4 overkill reps at half XP and a new best (3 → 6)
-  assert.deepEqual(s.bosses.pushup, { max: 7, hp: 7, count: 1, element: 0, rare: false });
+  assert.deepEqual(s.bosses.pushup, { max: 7, hp: 7, count: 1, element: 0, rare: false, family: 'dragon' });
   assert.equal(s.items['ルーンゼリー'], 1); assert.equal(s.history[0].boss, true);
   check(s);
 });
@@ -93,28 +93,90 @@ test('level cost is capped so later levels remain reachable', () => {
   assert.equal(progress(1000).level, 4); assert.equal(progress(1500).needed, 500); assert.equal(progress(1500 + 500 * 10).level, 15);
 });
 test('each region brings its own variants, golden rares pay extra, and defeats fill the bestiary', () => {
-  assert.equal(BESTIARY.length, 21); assert.equal(new Set(BESTIARY.map(m => m.id)).size, 21); assert.equal(new Set(BESTIARY.map(m => m.name)).size, 21);
+  assert.equal(BESTIARY.length, 63); assert.equal(new Set(BESTIARY.map(m => m.id)).size, 63); assert.equal(new Set(BESTIARY.map(m => m.name)).size, 63);
   const s = make(); ensureMotivation(s, '2026-09-01');
   assert.equal(bossOf(s, 'squat').name, 'ルーンスライム'); assert.equal(bossOf(s, 'squat').isNew, true);
   let { report } = workout(s, 'squat', 8, new Date(2026, 8, 1, 10));
-  assert.equal(s.dex['slime-0'], 1); assert.equal(report.boss.discovered, true); assert.equal(bossOf(s, 'squat').name, '夜羽のコウモリ');
+  assert.equal(s.dex['slime-0'], 1); assert.equal(report.boss.discovered, true); assert.equal(bossOf(s, 'squat').name, '碧鱗の幼竜');
   workout(s, 'squat', 30, new Date(2026, 8, 1, 11));
   ({ report } = workout(s, 'squat', 40, new Date(2026, 8, 1, 12), () => 0)); // third defeat opens the highland; the next boss is golden
   assert.equal(report.chapterUp, true); assert.equal(chapterOf(s).region, 1);
-  assert.equal(s.bosses.squat.element, 1); assert.equal(s.bosses.squat.rare, true); assert.equal(bossOf(s, 'squat').name, '黄金スライム');
+  assert.equal(s.bosses.squat.element, 1); assert.equal(s.bosses.squat.rare, true); assert.equal(bossOf(s, 'squat').name, '黄金の狼');
   assert.equal(bossOf(s, 'pushup').name, 'ルーンスライム'); // a waiting boss keeps the region it spawned in
   ({ report } = workout(s, 'squat', 50, new Date(2026, 8, 1, 13)));
-  assert.ok(report.lines.some(l => l.xp === BONUS.rare)); assert.ok(report.drops.includes('星のかけら')); assert.equal(s.dex['slime-rare'], 1);
-  assert.equal(bossOf(s, 'squat').name, '疾風のコウモリ'); assert.equal(bossOf(s, 'squat').rare, false);
+  assert.ok(report.lines.some(l => l.xp === BONUS.rare)); assert.ok(report.drops.includes('星のかけら')); assert.equal(s.dex['wolf-rare'], 1);
+  assert.equal(bossOf(s, 'squat').name, '疾風の幼竜'); assert.equal(bossOf(s, 'squat').rare, false);
   check(s);
-  const bad = JSON.parse(JSON.stringify(s)); bad.dex['dragon-0'] = 1; assert.throws(() => check(bad));
+  const bad = JSON.parse(JSON.stringify(s)); bad.dex['unknown-0'] = 1; assert.throws(() => check(bad));
   const badElement = JSON.parse(JSON.stringify(s)); badElement.bosses.squat.element = 9; assert.throws(() => check(badElement));
 });
 test('saves from before variants keep forest bosses and backfill the bestiary from defeat counts', () => {
   const s = make(); ensureMotivation(s, '2026-09-01');
-  for (const b of Object.values(s.bosses)) { delete b.element; delete b.rare; } delete s.dex;
+  for (const b of Object.values(s.bosses)) { delete b.element; delete b.rare; delete b.family; } delete s.dex;
   s.bosses.pushup.count = 2;
   ensureMotivation(s, '2026-09-01');
   assert.deepEqual(s.dex, { 'slime-0': 1, 'bat-0': 1 }); assert.equal(s.bosses.pushup.element, 0); assert.equal(bossOf(s, 'pushup').name, '苔石のゴーレム');
   check(s);
+});
+
+
+test('legacy family migration uses the frozen count % 3 rotation and is idempotent', () => {
+  const s = make(); ensureMotivation(s, '2026-09-01');
+  for (const [mode, count] of [['pushup', 4], ['squat', 8], ['plank', 9]]) {
+    Object.assign(s.bosses[mode], { count, hp: 2, element: 3, rare: true });
+    delete s.bosses[mode].family;
+  }
+  s.dex = { 'slime-0': 2, 'bat-rare': 1 };
+  validateMotivation(s);ensureMotivation(s, '2026-09-01');
+  assert.deepEqual(Object.values(s.bosses).map(b => b.family), ['bat','golem','slime']);
+  assert.deepEqual(s.dex, { 'slime-0': 2, 'bat-rare': 1 });
+  const before=JSON.stringify(s);ensureMotivation(s, '2026-09-01');assert.equal(JSON.stringify(s),before);check(s);
+});
+test('carried bosses retain family, region, rarity and HP across reload and another mode changing region', () => {
+  const s=make();ensureMotivation(s,'2026-09-01');
+  Object.assign(s.bosses.pushup,{family:'mushroom',element:0,rare:true});
+  workout(s,'pushup',2,new Date(2026,8,1,10));
+  const before=bossOf(s,'pushup');assert.equal(before.hp,3);
+  s.bosses.squat.count=2;workout(s,'squat',8,new Date(2026,8,1,11),()=>0);
+  assert.equal(chapterOf(s).region,1);
+  const restored=check(s).slots[0];ensureMotivation(restored,'2026-09-01');assert.deepEqual(bossOf(restored,'pushup'),before);
+  const {report}=workout(restored,'pushup',1,new Date(2026,8,1,12));
+  assert.equal(report.boss.id,'mushroom-rare');assert.equal(restored.bosses.pushup.family,'mushroom');assert.equal(restored.bosses.pushup.hp,2);
+});
+test('regional weighted pools select all native and visiting families using injected RNG', () => {
+  assert.deepEqual(REGION_POOLS.map(pool=>pool.slice(0,3).map(e=>e.family)),[
+    ['slime','mushroom','bat'],['wolf','bat','golem'],['wisp','wolf','golem'],
+    ['skeleton','mimic','wisp'],['dragon','golem','skeleton'],['dragon','wisp','mimic'],
+  ]);
+  REGION_POOLS.forEach((pool,region)=>{
+    const total=pool.reduce((n,e)=>n+e.weight,0);let offset=0;
+    assert.equal(new Set(pool.map(e=>e.family)).size,FAMILIES.length);
+    for(const e of pool){
+      const roll=(offset+e.weight/2)/total;offset+=e.weight;
+      assert.equal(chooseFamily(region,()=>roll),e.family);
+      const s=make();ensureMotivation(s,'2026-09-01');s.bosses.squat.count=region*CHAPTER_BOSSES;
+      const rolls=[1,roll,1];const {report}=workout(s,'pushup',5,new Date(2026,8,1,10),()=>rolls.shift());
+      assert.equal(s.bosses.pushup.family,e.family);assert.equal(report.next.id,`${e.family}-${region}`);assert.equal(s.bosses.pushup.element,region);
+    }
+  });
+});
+test('all old and new dex IDs validate; corrupt IDs or saved families are rejected', () => {
+  const s=make();ensureMotivation(s,'2026-09-01');
+  s.dex=Object.fromEntries(BESTIARY.map(m=>[m.id,1]));validateMotivation(s);check(s);
+  assert.equal(new Set(BESTIARY.map(m=>m.drop)).size,BESTIARY.length);
+  for(const id of ['slime-0','bat-5','golem-rare','dragon-0','mushroom-rare'])assert.ok(s.dex[id]);
+  for(const id of ['unknown-0','slime-6','wolf-gold','__proto__']){
+    const bad=JSON.parse(JSON.stringify(s));Object.defineProperty(bad.dex,id,{value:1,enumerable:true});assert.throws(()=>validateMotivation(bad));
+  }
+  for(const family of ['unknown',null,4,{},'__proto__']){
+    const bad=JSON.parse(JSON.stringify(s));bad.bosses.pushup.family=family;assert.throws(()=>check(bad));
+  }
+});
+test('pre-dex backups backfill only the original three families even after many rotations', () => {
+  const s=make();ensureMotivation(s,'2026-09-01');
+  s.bosses.pushup.count=10;s.bosses.squat.count=5;s.bosses.plank.count=0;
+  for(const b of Object.values(s.bosses))delete b.family;
+  delete s.dex;ensureMotivation(s,'2026-09-01');
+  assert.deepEqual(s.dex,{'slime-0':6,'bat-0':5,'golem-0':4});
+  assert.equal(s.bosses.pushup.family,'bat');assert.equal(s.bosses.squat.family,'golem');
 });

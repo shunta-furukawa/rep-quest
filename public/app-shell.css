@@ -74,3 +74,5 @@ body[data-view=workout] .app>header{display:none}#workout{display:flex;flex-dire
 .dex-entry.unseen img{filter:brightness(0) opacity(.45)}
 .dex-entry.unseen small{color:#6f8388}
 .dex-entry.rare{border-color:#e3bc7680}
+
+.bestiary{grid-template-columns:repeat(auto-fill,minmax(min(88px,100%),1fr))}.dex-entry{min-width:0}.dex-entry small{overflow-wrap:anywhere}
