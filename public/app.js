@@ -90,7 +90,14 @@ async function mountScene() {
 }
 function show(next) {
   view = next;
-  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery']) $(id).hidden = id !== view;
+  document.body.dataset.view = next;
+  $('app-nav').hidden = !['home', 'gallery', 'records', 'settings'].includes(next);
+  for (const button of document.querySelectorAll('[data-screen]')) {
+    if (button.dataset.screen === next) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  }
+  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery', 'records', 'settings']) $(id).hidden = id !== view;
+  $(next).scrollTop = 0;
   window.scrollTo(0, 0);
   mountScene();
 }
@@ -258,6 +265,27 @@ function renderGallery(){
 $('open-gallery').onclick=()=>{galleryJob=data.job;galleryStage=growth(data).stage;renderGallery();show('gallery');};
 $('gallery-back').onclick=()=>{render();show('home');};
 $('equip-job').onclick=()=>{if(writeBlocked)return toast('再読み込みしてから変更してください。');data.job=galleryJob;save();render();show('home');toast(`${JOBS[data.job].name}の育成に切り替えました。`);};
+for (const button of document.querySelectorAll('[data-screen]')) button.onclick = () => {
+  const next = button.dataset.screen;
+  if (next === 'gallery') { $('open-gallery').click(); return; }
+  render(); show(next);
+};
+for (const button of document.querySelectorAll('[data-record]')) button.onclick = () => {
+  for (const item of document.querySelectorAll('[data-record]')) {
+    const selected = item === button;
+    item.setAttribute('aria-pressed', String(selected));
+    $(`record-${item.dataset.record}`).hidden = !selected;
+  }
+};
+$('settings-slots').onclick = () => { renderSlots(); show('slots'); };
+document.querySelector('.brand').onclick = event => {
+  event.preventDefault();
+  if (session) finish();
+  else if (data) { render(); show('home'); }
+  else { renderSlots(); show('slots'); }
+};
+$('workout-help').onclick = () => { pause(); $('workout-guide').showModal(); };
+$('close-help').onclick = () => $('workout-guide').close();
 $('preview-attack').onclick=()=>scene?.play('attack');
 $('preview-victory').onclick=()=>scene?.play('celebrate');
 function renderCalendar() {
@@ -440,7 +468,7 @@ function refreshDate() {
     if (selectedDay === currentDay) selectedDay = today;
     const old = currentDay; currentDay = today;
     if (old.slice(0, 7) !== today.slice(0, 7)) calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    if (view === 'home') render();
+    if (['home', 'records', 'settings'].includes(view)) render();
   }
 }
 setInterval(refreshDate, 30000);
