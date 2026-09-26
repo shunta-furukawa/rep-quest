@@ -15,3 +15,5 @@ Six poses per rank: idle, breathing, attack preparation, follow-through, proud v
 and recovery. Sword: longsword/shield/cape; mage: crystal staff/robes; rogue: twin daggers/cloak.
 Original atlas sources are generated images in the conversation. This folder contains game-ready
 extracted derivatives rather than the prior concept board. No 3D dependency required.
+
+Mage display normalization: stage scales 1.34/1.35/1.32/1.27/1.24, centered on x96 and anchored at foot baseline y190. Applied after hair compositing in the shared portrait/animation renderer. All six poses fit the canvas after scaling.

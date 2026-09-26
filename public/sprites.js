@@ -1,5 +1,8 @@
 import { growth, JOBS } from './progression.js';
 const W=192,H=208;
+// Normalize body height rather than atlas cell size. Mage artwork has more
+// headroom around the staff; preserve the common foot baseline in every pose.
+const MAGE_SCALE=[1.34,1.35,1.32,1.27,1.24];
 const sheets=new Map();
 function load(job){
   if(!sheets.has(job))sheets.set(job,Promise.all(['','-hair'].map(suffix=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=`/sprites/${job}${suffix}.webp`;}))));
@@ -16,10 +19,10 @@ async function atlas(job,hair){
  }).catch(e=>{dyed.delete(key);sheets.delete(job);throw e;})); }
  return dyed.get(key);
 }
-function paint(c,image,row,frame){const x=c.getContext('2d');x.imageSmoothingEnabled=false;x.clearRect(0,0,W,H);x.drawImage(image,frame*W,row*H,W,H,0,0,W,H);}
+function paint(c,image,row,frame,job){const x=c.getContext('2d');const scale=job==='mage'?MAGE_SCALE[row]:1;x.imageSmoothingEnabled=false;x.clearRect(0,0,W,H);x.drawImage(image,frame*W,row*H,W,H,Math.round(W/2*(1-scale)),Math.round(190*(1-scale)),Math.round(W*scale),Math.round(H*scale));}
 export function portrait(job,stage,hair,label=''){
  const c=canvas();c.className='sprite-portrait';c.setAttribute('role','img');c.setAttribute('aria-label',label||JOBS[job].ranks[stage]);
- atlas(job,hair).then(image=>paint(c,image,stage,0)).catch(()=>{c.setAttribute('aria-label','冒険者の画像を読み込めません');});return c;
+ atlas(job,hair).then(image=>paint(c,image,stage,0,job)).catch(()=>{c.setAttribute('aria-label','冒険者の画像を読み込めません');});return c;
 }
 export function createScene(){
  const root=document.createElement('div');root.className='sprite-stage';
@@ -36,7 +39,7 @@ export function createScene(){
  else if(action==='celebrate'){next=[0,5,4,4,4,5,0][Math.floor(elapsed/230)]??0;if(elapsed>1700)action='idle';}
  else if(job!=='mage')next=Math.floor(now/650)%2;
  }
- if(next!==frame){paint(c,image,stage,next);frame=next;c.dataset.frame=String(next);}
+ if(next!==frame){paint(c,image,stage,next,job);frame=next;c.dataset.frame=String(next);}
  root.classList.toggle('guarding',mode==='guard');
  }
  requestAnimationFrame(render);
