@@ -1,9 +1,11 @@
+import { createBattle, defeats } from './battle.js';
 import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
 import { STORAGE_KEY, LEGACY_KEY, HAIR_COLORS, emptyStore, createCharacter, newActive, creditAmount, commitActive, migrateLegacy, validateStore, monthCells } from './storage.js';
 
 const $ = id => document.getElementById(id);
+const battle = createBattle($('battle-arena'));
 let store = emptyStore(), data = null, session = null, audio = null, wake = null;
 let lastTouch = -Infinity, toastTimer, storageOK = true, writeBlocked = false;
 let view = 'slots', editorIndex = 0, editorHair = HAIR_COLORS[0].value, editorJob = 'sword', galleryJob = 'sword', galleryStage = 0;
@@ -123,7 +125,7 @@ function renderSlots() {
     const number = document.createElement('small'); number.textContent = `SLOT 0${index + 1}`;
     const name = document.createElement('strong'); name.textContent = slot ? slot.name : '新しい冒険をはじめる';
     const details = document.createElement('span');
-    details.textContent = slot ? `Lv. ${progress(slot.xp).level} · ${slot.xp.toLocaleString()} XP · ${slot.sets} セット` : '名前と髪色を決めて、自分の分身をつくろう。';
+    details.textContent = slot ? `${JOBS[slot.job].name} Lv. ${progress(growth(slot).xp).level} · 累計 ${slot.xp.toLocaleString()} XP · ${slot.sets} セット` : '名前と髪色を決めて、自分の分身をつくろう。';
     const gem = document.createElement('i'); gem.className = 'slot-gem'; gem.style.setProperty('--hair', slot?.hair || '#567078'); const crest = document.createElement('img'); crest.src = slot ? '/art/crest.svg' : '/art/compass.svg'; crest.width = 40; crest.height = 40; crest.alt = ''; gem.append(crest);
     const copy = document.createElement('div'); copy.append(number, name, details); open.append(gem, copy);
     open.onclick = () => {
@@ -179,7 +181,7 @@ $('slots-import').onclick = () => $('import').click();
 
 function render() {
   if (!data) return;
-  const p = progress(data.xp), g = growth(data);
+  const g = growth(data), p = progress(g.xp);
   $('character-label').textContent = data.name;
   $('slot-label').textContent = `SLOT 0${store.selected + 1}`;
   $('level').textContent = p.level;
@@ -196,6 +198,15 @@ function render() {
   $('route').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="${i < data.sets % 5 ? 'done' : i === data.sets % 5 ? 'current' : ''}">${i < data.sets % 5 ? '✓' : i + 1}</span>`).join('');
   $('journey-detail').textContent = `あと ${5 - data.sets % 5} セットで、次のエリアへ。`;
   $('total-label').textContent = `${data.sets} セット達成`;
+  $('lifetime-xp').textContent = data.xp.toLocaleString();
+  $('lifetime-sets').textContent = data.sets.toLocaleString();
+  $('job-stats').replaceChildren();
+  for (const [job, info] of Object.entries(JOBS)) {
+    const row = document.createElement('div');row.className='job-stat';
+    const label = document.createElement('span');label.textContent=info.name+(job===data.job?' · 育成中':'');
+    const value = document.createElement('strong');value.textContent=`Lv. ${progress(data.jobs[job]).level} / ${data.jobs[job].toLocaleString()} XP`;
+    row.append(label,value);$('job-stats').append(row);
+  }
   $('today-date').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   $('today-xp').textContent = `${(data.daily[localDate()]?.xp || 0).toLocaleString()} XP`;
   $('history').replaceChildren();
@@ -205,7 +216,7 @@ function render() {
   for (const row of data.history.slice(0, 5)) {
     const e = document.createElement('div'); e.className = 'history-row';
     const left = document.createElement('div'), small = document.createElement('small'), right = document.createElement('span');
-    left.textContent = `${MODES[row.mode].name} · ${row.amount}${MODES[row.mode].unit}`;
+    left.textContent = `${defeats(row.mode,row.amount)} 体撃破 · ${MODES[row.mode].name} ${row.amount}${MODES[row.mode].unit}`;
     small.textContent = new Date(row.date).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     left.append(small); right.textContent = `+${row.xp} XP`; e.append(left, right); $('history').append(e);
   }
@@ -303,7 +314,7 @@ const instructions = {
 };
 function setup(mode) {
   if (writeBlocked) return toast('別の画面の記録を読み込むため、再読み込みしてください。');
-  session = { mode, amount: 0, state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
+  session = { mode, amount: 0, kills: 0, state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
   data.active = newActive(mode, new Date(), data.job); save();
   $('mode-title').textContent = MODES[mode].name;
   $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST' }[mode];
@@ -311,11 +322,13 @@ function setup(mode) {
   $('squat-settings').hidden = mode !== 'squat'; $('sensitivity').disabled = false;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = 'クエストをはじめる';
   $('pause').hidden = true; $('finish').hidden = true; $('count').textContent = '0';
-  $('unit').textContent = mode === 'plank' ? 'SECONDS' : 'REPS';
+  $('unit').textContent = '体 撃破';
+  $('raw-count').textContent = `0${MODES[mode].unit} · ${mode==='plank'?'5秒で1体撃破':'1回で1体撃破'}`;
+  battle.reset(data.job);
   $('status').textContent = '準備できたら、はじめよう'; $('sensor-status').textContent = '';
   $('counter').disabled = true;
   $('counter').setAttribute('aria-label', mode === 'pushup' ? '腕立てを1回カウント' : '運動のカウント');
-  $('enemy-hp').style.width = '100%'; $('enemy-label').textContent = '一歩ずつ、進もう。'; show('workout');
+  $('enemy-hp').style.width = '0%'; $('enemy-label').textContent = 'あと5体で、この群れを突破'; show('workout');
 }
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setup(b.dataset.mode));
 async function keepAwake() {
@@ -326,15 +339,18 @@ function persistActive() {
   if (data?.active && session) { creditAmount(data.active, session.amount); save(); }
 }
 function updateCount(impact = true) {
-  $('count').textContent = session.amount;
-  const step = session.mode === 'plank' ? 30 : 10, n = session.amount % step;
-  $('enemy-hp').style.width = `${100 - n / step * 100}%`;
-  $('enemy-label').textContent = session.amount >= step ? `${Math.floor(session.amount / step)} 回、試練を突破！` : '一歩ずつ、進もう。';
-  if (impact) {
-    beep(session.amount > 0 && n === 0);
-    scene?.play(session.mode === 'plank' ? 'guard' : session.mode === 'squat' ? 'heavy' : 'attack');
+  const kills = defeats(session.mode, session.amount), previous = session.kills;
+  session.kills = kills;
+  $('count').textContent = kills;
+  $('raw-count').textContent = `${session.amount}${MODES[session.mode].unit} · ${session.mode==='plank'?`次の撃破まで ${5-session.amount%5} 秒`:'1回で1体撃破'}`;
+  $('enemy-hp').style.width = `${kills % 5 / 5 * 100}%`;
+  $('enemy-label').textContent = `あと${5-kills%5}体で、この群れを突破`;
+  if (kills > previous && impact) {
+    beep(kills % 5 === 0);
+    scene?.play(session.mode === 'squat' ? 'heavy' : 'attack');
+    battle.strike(kills);
     $('counter').classList.remove('impact'); void $('counter').offsetWidth; $('counter').classList.add('impact');
-  }
+  } else battle.sync(kills);
   persistActive();
 }
 function countRep() { if (session?.state !== 'running' || writeBlocked) return; session.amount++; updateCount(); }
@@ -385,7 +401,7 @@ function tick() {
   if (session.state !== 'running') return;
   if (session.mode === 'plank') {
     const amount = Math.floor((session.elapsed + now - session.segment) / 1000);
-    if (amount !== session.amount) { session.amount = amount; updateCount(amount % 5 === 0); }
+    if (amount !== session.amount) { session.amount = amount; updateCount(); }
   }
   if (session.mode === 'squat' && now - session.lastSensor > 2500) { pause(); $('sensor-status').textContent = 'センサーが途切れたため一時停止しました。'; }
 }
@@ -403,14 +419,14 @@ $('counter').addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 
 function finish() {
   if (!session) return;
   pause(); clearInterval(session.timer); releaseWake();
-  const { mode, amount } = session, before = progress(data.xp).level, beforeGrowth=growth(data);
+  const { mode, amount } = session, before = progress(growth(data).xp).level, beforeGrowth=growth(data);
   persistActive(); const earned = commitActive(data); save(); session = null;
   if (!amount) { render(); show('home'); return; }
-  const after = progress(data.xp).level;
-  $('result-description').textContent = `${data.name} · ${MODES[mode].name} ${amount}${MODES[mode].unit} 達成`;
+  const after = progress(growth(data).xp).level;
+  $('result-description').textContent = `${defeats(mode,amount)} 体撃破！ ${MODES[mode].name} ${amount}${MODES[mode].unit} 達成`;
   $('reward-xp').textContent = earned;
   $('level-up').textContent = after > before ? `LEVEL UP! Lv. ${before} → Lv. ${after}` : '経験値を獲得。着実に、強くなっている。';
-  $('result-summary').textContent = `累計 ${data.sets} セット達成 ／ Lv. ${after}${storageOK ? ' · 自動保存しました' : ' · 保存できませんでした。バックアップしてください'}`;
+  $('result-summary').textContent = `累計 ${data.xp.toLocaleString()} XP · ${data.sets} セット ／ ${JOBS[data.job].name} Lv. ${after}${storageOK ? ' · 自動保存しました' : ' · 保存できませんでした。バックアップしてください'}`;
   const g=growth(data);
   $('growth-reward').textContent = g.stage>beforeGrowth.stage ? `昇格！ ${g.title}になりました。新しい装備を身につけた！` : g.medals>beforeGrowth.medals ? `勲章を獲得！ ${JOBS[g.job].name}の成長が姿に刻まれました。` : `${JOBS[g.job].name} +${earned} XP · 次の${g.reward.name}まで ${Math.max(0,g.reward.xp-g.xp).toLocaleString()} XP`;
   show('result'); beep(true);

@@ -1,5 +1,5 @@
 export const MODES={pushup:{name:'腕立て伏せ',unit:'回',xp:10},squat:{name:'スクワット',unit:'回',xp:10},plank:{name:'プランク',unit:'秒',xp:2}};
-export function progress(xp){let level=1,remaining=xp;while(remaining>=level*100){remaining-=level*100;level++;}return{level,current:remaining,needed:level*100};}
+export function progress(xp){let level=0,remaining=xp;while(remaining>=(level+1)*100){remaining-=(level+1)*100;level++;}return{level,current:remaining,needed:(level+1)*100};}
 export function localDate(date=new Date()){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 export function validateSave(value){if(!value||value.version!==1||!Number.isFinite(value.xp)||value.xp<0||value.xp>1e9||!Number.isInteger(value.sets)||value.sets<0||!Array.isArray(value.history)||value.history.length>200)throw new Error('Invalid save');for(const row of value.history){if(!MODES[row.mode]||!Number.isInteger(row.amount)||row.amount<0||row.amount>1e7||!Number.isFinite(row.xp)||row.xp<0||!Number.isFinite(Date.parse(row.date)))throw new Error('Invalid history');}return value;}
 // Detect a complete biphasic motion, then require rest before another rep.
