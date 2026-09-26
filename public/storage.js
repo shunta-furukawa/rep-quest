@@ -1,5 +1,6 @@
 import { ensureJobs, grantJobXp, validJob } from './progression.js';
 import { MODES, localDate, validateSave } from './engine.js';
+import { validateMotivation } from './motivation.js';
 
 export const STORAGE_KEY = 'rep-quest:v2';
 export const LEGACY_KEY = 'rep-quest:v1';
@@ -68,7 +69,7 @@ export function commitActive(slot) {
   slot.xp += xp;
   slot.sets++;
   for (const [key, amount] of Object.entries(a.days)) addDaily(slot, a.mode, amount, key);
-  slot.history.unshift({ mode: a.mode, amount: a.amount, xp, date: a.lastAt });
+  slot.history.unshift({ mode: a.mode, amount: a.amount, xp, date: a.lastAt, job: a.job || slot.job || 'sword' });
   slot.history = slot.history.slice(0, 100); // Daily aggregates are never truncated.
   return xp;
 }
@@ -108,6 +109,7 @@ function validateCharacter(s) {
     if (!validJob(s.job) || !s.jobs || Object.keys(s.jobs).length !== 3 || !['sword','mage','rogue'].every(k => integer(s.jobs[k])) || Object.values(s.jobs).reduce((a,b) => a+b,0) !== s.xp) throw new Error('Invalid job progress');
   }
   ensureJobs(s);
+  validateMotivation(s);
   for (const row of s.history) {
     if (!MODES[row.mode] || !integer(row.amount, 1e7) || !integer(row.xp) || !validTimestamp(row.date)) throw new Error('Invalid history');
   }
@@ -119,7 +121,8 @@ function validateCharacter(s) {
       if (!MODES[mode] || !entry || !integer(entry.amount, 1e8) || !integer(entry.xp)) throw new Error('Invalid day details');
       sum += entry.xp;
     }
-    if (sum !== day.xp) throw new Error('Invalid day sum');
+    if (day.bonus !== undefined && !integer(day.bonus)) throw new Error('Invalid day bonus');
+    if (sum + (day.bonus || 0) !== day.xp) throw new Error('Invalid day sum');
     total += day.xp;
   }
   if (total !== s.xp) throw new Error('Invalid XP total');

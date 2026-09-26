@@ -43,3 +43,22 @@ body[data-view=workout] .app>header{display:none}#workout{display:flex;flex-dire
 
 /* Compact, explicit PWA updates from every top-level screen. */
 .app>header{gap:8px}.app>header .brand{min-width:0;flex:1;max-width:178px;margin-right:auto}#app-update{font-size:10px;padding:7px;min-height:40px;white-space:nowrap;flex-shrink:0}#app-update.update-ready{color:#122633;background:#e5c689;border-color:#f4ddad;box-shadow:0 0 12px #e5c68933}#app-update:disabled{opacity:.6}
+
+/* v0.7 motivation: bosses, daily request, rested XP and result breakdown. */
+.quest-boss{display:block;font-style:normal;font-size:9px;color:#88e6ec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.3px}
+.quest-copy{min-width:0}
+.quest.is-request{position:relative;border-color:#e3bc76}
+.quest.is-request:after{content:"依頼";position:absolute;top:-1px;right:-1px;padding:1px 6px;background:#e3bc76;color:#091925;font-size:9px;font-weight:bold;letter-spacing:1px}
+.today-quest{color:#ebd9ae;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:8px}
+#rest-note{color:#88e6ec}
+.result-lines{list-style:none;margin:0;padding:0;display:grid;gap:3px;font-size:12px;text-align:left;max-width:420px;width:100%;align-self:center}
+.result-lines li{display:flex;justify-content:space-between;gap:10px;padding:5px 10px;border-bottom:1px solid #a9855033;color:#dfe6e3}
+.result-lines li strong{color:#88e6ec;font-weight:400;font-family:Georgia,serif;white-space:nowrap}
+.battle-enemy.hit{animation:enemy-hit .28s ease-out both}
+.battle-enemy.vanquished{opacity:.18;filter:grayscale(1) drop-shadow(0 8px 7px #0007)}
+.battle-arena.crit #battle-feedback{color:#ffe9a8;font-size:17px}
+.bests #best-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+@keyframes enemy-hit{0%{transform:translateX(0);filter:brightness(2.4)}40%{transform:translateX(9px)}100%{transform:translateX(0)}}
+@media(min-width:700px){#home .quest-boss{white-space:normal;font-size:10px}}
+@media(prefers-reduced-motion:reduce){.battle-enemy.hit{animation:none}}
+#home>.section-heading h2{white-space:nowrap}#rest-note{text-align:right}

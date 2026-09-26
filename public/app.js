@@ -1,5 +1,6 @@
 import { createAppUpdates } from './updates.js';
-import { createBattle, defeats } from './battle.js';
+import { bossState, createBattle, defeats } from './battle.js';
+import { BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from './motivation.js';
 import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -57,7 +58,7 @@ function save() {
 }
 let recovered = false;
 if (!writeBlocked) {
-  for (const slot of store.slots) if (slot?.active) { recovered = Boolean(commitActive(slot)) || recovered; }
+  for (const slot of store.slots) if (slot?.active && commitActive(slot)) { resolveSet(slot, slot.history[0]); recovered = true; }
   if (store.slots.some(Boolean)) save();
 }
 function selectedProfile() {
@@ -190,6 +191,9 @@ $('slots-import').onclick = () => $('import').click();
 
 function render() {
   if (!data) return;
+  const snapshot = JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items]);
+  ensureMotivation(data);
+  if (JSON.stringify([data.rest, data.quest, data.bosses, data.best, data.items]) !== snapshot) save();
   const g = growth(data), p = progress(g.xp);
   $('character-label').textContent = data.name;
   $('slot-label').textContent = `SLOT 0${store.selected + 1}`;
@@ -200,12 +204,25 @@ function render() {
   $('rank').textContent = g.title;
   $('weapon').textContent = g.weapon;
   renderNext();
-  const regions = [['はじまりの森', '森の奥へ、一歩ずつ。'], ['風渡りの高原', '風を背に、次の場所へ。'], ['星灯りの遺跡', '積み重ねが、扉を開く。'], ['夜明けの頂', 'ここから、また冒険が始まる。']];
-  const chapter = Math.floor(data.sets / 5), r = regions[chapter % regions.length];
-  $('journey-number').textContent = `CHAPTER ${String(chapter + 1).padStart(2, '0')}`;
-  $('region-label').textContent = r[0]; $('region-title').textContent = r[1];
-  $('route').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="${i < data.sets % 5 ? 'done' : i === data.sets % 5 ? 'current' : ''}">${i < data.sets % 5 ? '✓' : i + 1}</span>`).join('');
-  $('journey-detail').textContent = `あと ${5 - data.sets % 5} セットで、次のエリアへ。`;
+  const c = chapterOf(data);
+  $('journey-number').textContent = `CHAPTER ${String(c.chapter + 1).padStart(2, '0')}`;
+  $('region-label').textContent = c.name; $('region-title').textContent = c.line;
+  $('route').innerHTML = Array.from({ length: CHAPTER_BOSSES }, (_, i) => `<span class="${i < c.progress ? 'done' : i === c.progress ? 'current' : ''}">${i < c.progress ? '✓' : i + 1}</span>`).join('');
+  $('journey-detail').textContent = `あと ${CHAPTER_BOSSES - c.progress} 体のボスを倒すと、次のエリアへ。`;
+  const q = data.quest, qUnit = MODES[q.mode].unit, qDone = data.daily[q.day]?.byMode[q.mode]?.amount || 0;
+  $('today-quest').textContent = q.done ? `依頼達成 ✓ ${MODES[q.mode].name} ${q.target}${qUnit}` : `今日の依頼：${MODES[q.mode].name} ${Math.min(qDone, q.target)}/${q.target}${qUnit} · +${BONUS.quest}XP`;
+  $('rest-note').textContent = data.rest.pool ? `休息ボーナス ${data.rest.pool}XP（XP2倍）` : '自分のペースで、1セットから';
+  for (const el of document.querySelectorAll('[data-boss]')) {
+    const b = bossOf(data, el.dataset.boss);
+    el.textContent = `Lv.${b.level} ${b.name} · HP ${b.hp}/${b.max}${b.hp < b.max ? ' 持ち越し' : ''}`;
+  }
+  for (const b of document.querySelectorAll('[data-mode]')) b.classList.toggle('is-request', b.dataset.mode === q.mode && !q.done);
+  $('best-stats').replaceChildren(...Object.entries(MODES).map(([m, info]) => {
+    const d = document.createElement('div'), label = document.createElement('small'), value = document.createElement('strong');
+    label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
+  }));
+  const items = Object.entries(data.items);
+  $('item-stats').textContent = items.length ? `戦利品：${items.map(([k, n]) => `${k} ×${n}`).join('、')}` : 'ボスを倒すと戦利品が手に入ります。まれに星のかけらも。';
   $('total-label').textContent = `${data.sets} セット達成`;
   $('lifetime-xp').textContent = data.xp.toLocaleString();
   $('lifetime-sets').textContent = data.sets.toLocaleString();
@@ -216,7 +233,6 @@ function render() {
     const value = document.createElement('strong');value.textContent=`Lv. ${progress(data.jobs[job]).level} / ${data.jobs[job].toLocaleString()} XP`;
     row.append(label,value);$('job-stats').append(row);
   }
-  $('today-date').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   $('today-xp').textContent = `${(data.daily[localDate()]?.xp || 0).toLocaleString()} XP`;
   $('history').replaceChildren();
   if (!data.history.length) {
@@ -225,7 +241,7 @@ function render() {
   for (const row of data.history.slice(0, 5)) {
     const e = document.createElement('div'); e.className = 'history-row';
     const left = document.createElement('div'), small = document.createElement('small'), right = document.createElement('span');
-    left.textContent = `${defeats(row.mode,row.amount)} 体撃破 · ${MODES[row.mode].name} ${row.amount}${MODES[row.mode].unit}`;
+    left.textContent = `${MODES[row.mode].name} ${row.amount}${MODES[row.mode].unit}${row.boss ? ' · ボス撃破' : ''}`;
     small.textContent = new Date(row.date).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     left.append(small); right.textContent = `+${row.xp} XP`; e.append(left, right); $('history').append(e);
   }
@@ -321,6 +337,7 @@ function renderCalendar() {
     for (const [mode, entry] of Object.entries(day.byMode)) {
       const row = document.createElement('p'); row.textContent = `${MODES[mode].name} ${entry.amount}${MODES[mode].unit}　+${entry.xp} XP`; $('day-detail').append(row);
     }
+    if (day.bonus) { const row = document.createElement('p'); row.textContent = `ボス・自己ベスト・休息などのボーナス　+${day.bonus} XP`; $('day-detail').append(row); }
   } else {
     const empty = document.createElement('p'); empty.textContent = selectedDay > today ? 'これからの冒険。' : selectedDay === today ? '今日の物語は、これから。' : '運動の記録はありません。休む日も、冒険の一部。'; $('day-detail').append(empty);
   }
@@ -344,7 +361,8 @@ const instructions = {
 };
 function setup(mode) {
   if (writeBlocked) return toast('別の画面の記録を読み込むため、再読み込みしてください。');
-  session = { mode, amount: 0, kills: 0, state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
+  ensureMotivation(data);
+  session = { mode, amount: 0, kills: 0, defeated: false, boss: bossOf(data, mode), state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
   data.active = newActive(mode, new Date(), data.job); save();
   $('mode-title').textContent = MODES[mode].name;
   $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST' }[mode];
@@ -352,13 +370,12 @@ function setup(mode) {
   $('squat-settings').hidden = mode !== 'squat'; $('sensitivity').disabled = false;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = 'クエストをはじめる';
   $('pause').hidden = true; $('finish').hidden = true; $('count').textContent = '0';
-  $('unit').textContent = '体 撃破';
-  $('raw-count').textContent = `0${MODES[mode].unit} · ${mode==='plank'?'5秒で1体撃破':'1回で1体撃破'}`;
-  battle.reset(data.job);
+  $('unit').textContent = MODES[mode].unit;
+  battle.reset(data.job, session.boss);
   $('status').textContent = '準備できたら、はじめよう'; $('sensor-status').textContent = '';
   $('counter').disabled = true;
   $('counter').setAttribute('aria-label', mode === 'pushup' ? '腕立てを1回カウント' : '運動のカウント');
-  $('enemy-hp').style.width = '0%'; $('enemy-label').textContent = 'あと5体で、この群れを突破'; show('workout');
+  updateCount(false); show('workout');
 }
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setup(b.dataset.mode));
 async function keepAwake() {
@@ -369,18 +386,20 @@ function persistActive() {
   if (data?.active && session) { creditAmount(data.active, session.amount); save(); }
 }
 function updateCount(impact = true) {
-  const kills = defeats(session.mode, session.amount), previous = session.kills;
-  session.kills = kills;
-  $('count').textContent = kills;
-  $('raw-count').textContent = `${session.amount}${MODES[session.mode].unit} · ${session.mode==='plank'?`次の撃破まで ${5-session.amount%5} 秒`:'1回で1体撃破'}`;
-  $('enemy-hp').style.width = `${kills % 5 / 5 * 100}%`;
-  $('enemy-label').textContent = `あと${5-kills%5}体で、この群れを突破`;
-  if (kills > previous && impact) {
-    beep(kills % 5 === 0);
-    scene?.play(session.mode === 'squat' ? 'heavy' : 'attack');
-    battle.strike(kills);
+  const { mode, amount, boss } = session, unit = MODES[mode].unit, best = data.best[mode];
+  const st = bossState(boss, amount), hits = defeats(mode, amount), previous = session.kills, justDefeated = st.defeated && !session.defeated;
+  session.kills = hits; session.defeated = st.defeated;
+  $('count').textContent = amount;
+  $('raw-count').textContent = st.defeated ? `ボス撃破！ オーバーキル +${st.overkill}${unit}` : `ボスに ${amount} ダメージ · 残りHP ${st.hp}`;
+  $('enemy-hp').style.width = `${st.hp / st.max * 100}%`;
+  const record = best && amount > best ? '自己ベスト更新中！' : best ? `自己ベスト ${best}${unit}` : 'はじめての記録に挑戦';
+  $('enemy-label').textContent = `${st.defeated ? '撃破！ ここからはオーバーキル' : boss.hp < boss.max && !amount ? `前回の残りHP ${st.hp}。倒しきろう` : `HP ${st.hp}/${st.max}`} · ${record}`;
+  if (impact && (justDefeated || hits > previous)) {
+    beep(justDefeated);
+    scene?.play(justDefeated ? 'celebrate' : mode === 'squat' ? 'heavy' : 'attack');
+    battle.strike({ crit: !justDefeated && Math.random() < 0.125, defeated: justDefeated, overkill: justDefeated ? 0 : st.overkill });
     $('counter').classList.remove('impact'); void $('counter').offsetWidth; $('counter').classList.add('impact');
-  } else battle.sync(kills);
+  }
   persistActive();
 }
 function countRep() { if (session?.state !== 'running' || writeBlocked) return; session.amount++; updateCount(); }
@@ -450,11 +469,20 @@ function finish() {
   if (!session) return;
   pause(); clearInterval(session.timer); releaseWake();
   const { mode, amount } = session, before = progress(growth(data).xp).level, beforeGrowth=growth(data);
-  persistActive(); const earned = commitActive(data); save(); session = null;
+  persistActive(); const base = commitActive(data), report = base ? resolveSet(data, data.history[0]) : null; save(); session = null;
   if (!amount) { render(); show('home'); return; }
-  const after = progress(growth(data).xp).level;
-  $('result-description').textContent = `${defeats(mode,amount)} 体撃破！ ${MODES[mode].name} ${amount}${MODES[mode].unit} 達成`;
+  const after = progress(growth(data).xp).level, earned = base + report.bonus, unit = MODES[mode].unit;
+  $('result-title').textContent = report.boss.defeated ? 'ボスを撃破した！' : '今日の一歩が、力になる。';
+  $('result-description').textContent = `${MODES[mode].name} ${amount}${unit} 達成`;
   $('reward-xp').textContent = earned;
+  const lines = [{ text: `${MODES[mode].name} ${amount}${unit}`, xp: base }, ...report.lines];
+  if (report.drops.length) lines.push({ text: `戦利品：${report.drops.join('、')}`, xp: 0 });
+  if (report.chapterUp) lines.push({ text: `新しいエリアへ：${chapterOf(data).name}`, xp: 0 });
+  $('result-lines').replaceChildren(...lines.map(({ text, xp }) => {
+    const li = document.createElement('li'), label = document.createElement('span'); label.textContent = text; li.append(label);
+    if (xp) { const value = document.createElement('strong'); value.textContent = `+${xp} XP`; li.append(value); }
+    return li;
+  }));
   $('level-up').textContent = after > before ? `LEVEL UP! Lv. ${before} → Lv. ${after}` : '経験値を獲得。着実に、強くなっている。';
   $('result-summary').textContent = `累計 ${data.xp.toLocaleString()} XP · ${data.sets} セット ／ ${JOBS[data.job].name} Lv. ${after}${storageOK ? ' · 自動保存しました' : ' · 保存できませんでした。バックアップしてください'}`;
   const g=growth(data);
@@ -493,7 +521,7 @@ $('import').onchange = async event => {
     const raw = JSON.parse(await file.text());
     const restored = raw.version === 1 ? migrateLegacy(raw) : validateStore(raw);
     if (!confirm('3つのスロットを、バックアップの内容で置き換えますか？現在の記録は置き換わります。')) return;
-    for (const slot of restored.slots) if (slot?.active) commitActive(slot);
+    for (const slot of restored.slots) if (slot?.active && commitActive(slot)) resolveSet(slot, slot.history[0]);
     // Explicit restoration is a full replacement, including recovery from a corrupt save.
     restored.revision = (store.revision || 0) + 1;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
