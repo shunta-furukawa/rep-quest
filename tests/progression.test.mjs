@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { growth,STAGES } from '../public/progression.js';
+import { formVisibility,growth,STAGES } from '../public/progression.js';
 import { createCharacter,emptyStore,validateStore,newActive,creditAmount,commitActive } from '../public/storage.js';
 const make=()=>createCharacter('ルーン','#855037');
 test('v2 migration assigns historical XP once to sword and retains active earned date',()=>{
@@ -21,4 +21,10 @@ test('backups reject missing, unknown or inconsistent job data',()=>{
  for(const bad of [{job:'warlock',jobs:{sword:0,mage:0,rogue:0}},{job:'mage',jobs:{sword:10,mage:0,rogue:0}},{job:'mage',jobs:{sword:0,mage:0}}]){
  const s=Object.assign(make(),bad),store=emptyStore();store.slots[0]=s;assert.throws(()=>validateStore(store));
  }
+});
+test('forms are revealed one step ahead: reached and next shown, later hidden', () => {
+  assert.deepEqual([0,1,2,3,4].map(i => formVisibility(0, i)), ['reached', 'next', 'hidden', 'hidden', 'hidden']);
+  assert.deepEqual([0,1,2,3,4].map(i => formVisibility(399, i)), ['reached', 'next', 'hidden', 'hidden', 'hidden']);
+  assert.deepEqual([0,1,2,3,4].map(i => formVisibility(400, i)), ['reached', 'reached', 'next', 'hidden', 'hidden']);
+  assert.deepEqual([0,1,2,3,4].map(i => formVisibility(24000, i)), ['reached', 'reached', 'reached', 'reached', 'reached']);
 });

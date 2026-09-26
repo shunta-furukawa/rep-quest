@@ -19,10 +19,13 @@ async function atlas(job,hair){
  }).catch(e=>{dyed.delete(key);sheets.delete(job);throw e;})); }
  return dyed.get(key);
 }
-function paint(c,image,row,frame,job){const x=c.getContext('2d');const scale=job==='mage'?MAGE_SCALE[row]:1;x.imageSmoothingEnabled=false;x.clearRect(0,0,W,H);x.drawImage(image,frame*W,row*H,W,H,Math.round(W/2*(1-scale)),Math.round(190*(1-scale)),Math.round(W*scale),Math.round(H*scale));}
-export function portrait(job,stage,hair,label=''){
- const c=canvas();c.className='sprite-portrait';c.setAttribute('role','img');c.setAttribute('aria-label',label||JOBS[job].ranks[stage]);
- atlas(job,hair).then(image=>paint(c,image,stage,0,job)).catch(()=>{c.setAttribute('aria-label','冒険者の画像を読み込めません');});return c;
+function paint(c,image,row,frame,job,silhouette=false){const x=c.getContext('2d');const scale=job==='mage'?MAGE_SCALE[row]:1;x.imageSmoothingEnabled=false;x.clearRect(0,0,W,H);x.drawImage(image,frame*W,row*H,W,H,Math.round(W/2*(1-scale)),Math.round(190*(1-scale)),Math.round(W*scale),Math.round(H*scale));
+ // Unreached forms keep only their outline so the promotion itself stays a reveal.
+ if(silhouette){x.globalCompositeOperation='source-in';x.fillStyle='#10283a';x.fillRect(0,0,W,H);x.globalCompositeOperation='source-over';}
+ c.classList.toggle('is-silhouette',silhouette);}
+export function portrait(job,stage,hair,label='',silhouette=false){
+ const c=canvas();c.className='sprite-portrait';c.setAttribute('role','img');c.setAttribute('aria-label',label||(silhouette?'まだ見ぬ姿':JOBS[job].ranks[stage]));
+ atlas(job,hair).then(image=>paint(c,image,stage,0,job,silhouette)).catch(()=>{c.setAttribute('aria-label','冒険者の画像を読み込めません');});return c;
 }
 export function createScene(){
  const root=document.createElement('div');root.className='sprite-stage';
@@ -30,7 +33,7 @@ export function createScene(){
  const medal=document.createElement('div');medal.className='sprite-medals';
  const feedback=document.createElement('span');feedback.className='sprite-feedback';feedback.setAttribute('aria-hidden','true');
  root.append(c,medal,feedback);
- let visible=false,image=null,profile=null,stage=0,job='sword',action='idle',at=0,mode='idle',frame=-1,token=0,last=0;
+ let visible=false,image=null,profile=null,stage=0,job='sword',silhouette=false,action='idle',at=0,mode='idle',frame=-1,token=0,last=0;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
  function render(now){requestAnimationFrame(render);if(!visible||document.hidden||!image||now-last<80)return;last=now;let next=0;
  const elapsed=now-at;
@@ -39,12 +42,12 @@ export function createScene(){
  else if(action==='celebrate'){next=[0,5,4,4,4,5,0][Math.floor(elapsed/230)]??0;if(elapsed>1700)action='idle';}
  else if(job!=='mage')next=Math.floor(now/650)%2;
  }
- if(next!==frame){paint(c,image,stage,next,job);frame=next;c.dataset.frame=String(next);}
+ if(next!==frame){paint(c,image,stage,next,job,silhouette);frame=next;c.dataset.frame=String(next);}
  root.classList.toggle('guarding',mode==='guard');
  }
  requestAnimationFrame(render);
  return {mount(el){el.replaceChildren(root);},setVisible(v){visible=v;},setMode(v){mode=v;},
- async setCharacter(p){profile=p;const g=growth(p);job=g.job;stage=g.stage;const id=++token;image=null;c.getContext('2d').clearRect(0,0,W,H);c.setAttribute('aria-label',`${p.name||'冒険者'}・${g.title}`);medal.textContent=g.medals?'◆'.repeat(g.medals):'';medal.setAttribute('aria-label',`${g.medals}つの勲章`);try{const loaded=await atlas(job,p.hair);if(id!==token)return;image=loaded;frame=-1;feedback.textContent='';}catch{if(id===token)feedback.textContent='画像を読み込めません。再読み込みしてください';}},
+ async setCharacter(p){profile=p;const g=growth(p);job=g.job;stage=g.stage;silhouette=Boolean(p.silhouette);const id=++token;image=null;c.getContext('2d').clearRect(0,0,W,H);c.setAttribute('aria-label',silhouette?'まだ見ぬ姿':`${p.name||'冒険者'}・${g.title}`);medal.textContent=g.medals&&!silhouette?'◆'.repeat(g.medals):'';medal.setAttribute('aria-label',`${g.medals}つの勲章`);try{const loaded=await atlas(job,p.hair);if(id!==token)return;image=loaded;frame=-1;feedback.textContent='';}catch{if(id===token)feedback.textContent='画像を読み込めません。再読み込みしてください';}},
  play(v){if(v==='guard'){mode='guard';return;}action=v;at=performance.now();frame=-1;feedback.textContent=v==='celebrate'?'QUEST COMPLETE':v==='heavy'?'POWER!':'HIT!';root.classList.remove('sprite-impact');void root.offsetWidth;root.classList.add('sprite-impact');setTimeout(()=>feedback.textContent='',900);},
  };
 }
