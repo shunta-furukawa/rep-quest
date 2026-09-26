@@ -4,7 +4,7 @@
 
 ## 開発
 
-Node.js 22+、Python 3（ローカルサーバー用）。依存パッケージなし。
+Node.js 22+、Python 3（ローカルサーバー用）。3D表示にThree.jsを使用します。
 
 ```sh
 npm ci
