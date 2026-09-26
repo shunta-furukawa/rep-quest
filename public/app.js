@@ -1,10 +1,12 @@
+import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
+import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
 import { STORAGE_KEY, LEGACY_KEY, HAIR_COLORS, emptyStore, createCharacter, newActive, creditAmount, commitActive, migrateLegacy, validateStore, monthCells } from './storage.js';
 
 const $ = id => document.getElementById(id);
 let store = emptyStore(), data = null, session = null, audio = null, wake = null;
 let lastTouch = -Infinity, toastTimer, storageOK = true, writeBlocked = false;
-let view = 'slots', editorIndex = 0, editorHair = HAIR_COLORS[0].value;
+let view = 'slots', editorIndex = 0, editorHair = HAIR_COLORS[0].value, editorJob = 'sword', galleryJob = 'sword', galleryStage = 0;
 let selectedDay = localDate(), calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let scene = null, sceneLoad = null, currentDay = localDate();
 
@@ -56,14 +58,15 @@ if (!writeBlocked) {
   if (store.slots.some(Boolean)) save();
 }
 function selectedProfile() {
-  if (view === 'creator') return { name: $('character-name').value, hair: editorHair, xp: store.slots[editorIndex]?.xp || 0 };
+  if (view === 'creator') return { ...(store.slots[editorIndex] || {xp:0,jobs:{sword:0,mage:0,rogue:0}}), name: $('character-name').value, hair: editorHair, job:editorJob };
+  if (view === 'gallery') return {...data,job:galleryJob,jobs:{...data.jobs,[galleryJob]:STAGES[galleryStage]}};
   return data;
 }
 async function mountScene() {
   const mount = $(`${view}-scene`);
   if (!mount) { scene?.setVisible(false); return; }
   if (!sceneLoad) {
-    sceneLoad = import('./scene.js').then(({ createScene }) => createScene()).catch(() => null);
+    sceneLoad = import('./sprites.js').then(({ createScene }) => createScene()).catch(() => null);
   }
   scene = await sceneLoad;
   const currentMount = $(`${view}-scene`);
@@ -71,21 +74,21 @@ async function mountScene() {
   if (scene) {
     scene.mount(currentMount);
     const profile = selectedProfile();
-    if (profile) scene.setCharacter(profile.hair, progress(profile.xp).level);
+    if (profile) scene.setCharacter(profile);
     scene.setVisible(true);
     scene.setMode(view === 'workout' && session?.state === 'running' && session.mode === 'plank' ? 'guard' : 'idle');
     if (view === 'result') scene.play('celebrate');
   } else {
     const emblem = document.createElement('img'); emblem.src = '/art/crest.svg'; emblem.width = 90; emblem.height = 110; emblem.alt = '';
-    const note = document.createElement('small'); note.textContent = 'この環境では3D表示を利用できません';
+    const note = document.createElement('small'); note.textContent = '冒険者の画像を読み込めません';
     currentMount.replaceChildren(emblem, note);
     currentMount.classList.add('scene-fallback');
-    currentMount.setAttribute('aria-label', '3D表示を利用できません。運動の計測と記録はそのまま使えます。');
+    currentMount.setAttribute('aria-label', '画像を読み込めません。運動の計測と記録はそのまま使えます。');
   }
 }
 function show(next) {
   view = next;
-  for (const id of ['slots', 'creator', 'home', 'workout', 'result']) $(id).hidden = id !== view;
+  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery']) $(id).hidden = id !== view;
   window.scrollTo(0, 0);
   mountScene();
 }
@@ -142,6 +145,8 @@ function editCharacter(index) {
   editorIndex = index;
   const existing = store.slots[index];
   editorHair = existing?.hair || HAIR_COLORS[0].value;
+  editorJob = existing?.job || 'sword';
+  drawJobs($('creator-jobs'),editorJob,job=>{editorJob=job;drawCreatorJobs();mountScene();},editorHair);
   $('character-name').value = existing?.configured ? existing.name : '';
   $('creator-title').textContent = existing?.configured ? 'あなたらしい冒険者に。' : 'あなたの冒険者をつくる。';
   $('create-character').textContent = existing?.configured ? '変更を保存する' : 'この冒険者ではじめる';
@@ -152,7 +157,7 @@ function editCharacter(index) {
     const input = document.createElement('input'); input.type = 'radio'; input.name = 'hair'; input.value = value; input.checked = value === editorHair;
     const swatch = document.createElement('span'); swatch.className = 'hair-swatch';
     const text = document.createElement('span'); text.textContent = name;
-    input.onchange = () => { editorHair = value; scene?.setCharacter(editorHair, progress(existing?.xp || 0).level); };
+    input.onchange = () => { editorHair = value; drawCreatorJobs(); scene?.setCharacter(selectedProfile()); };
     label.append(input, swatch, text); $('hair-options').append(label);
   });
   show('creator');
@@ -165,7 +170,7 @@ $('character-form').onsubmit = event => {
   const existing = store.slots[editorIndex];
   if (existing) Object.assign(existing, { name, hair: editorHair, configured: true });
   else store.slots[editorIndex] = createCharacter(name, editorHair);
-  store.selected = editorIndex; data = store.slots[editorIndex]; save();
+  store.selected = editorIndex; data = store.slots[editorIndex]; ensureJobs(data); data.job=editorJob; save();
   render(); show('home');
 };
 $('creator-back').onclick = () => { renderSlots(); show('slots'); };
@@ -174,15 +179,16 @@ $('slots-import').onclick = () => $('import').click();
 
 function render() {
   if (!data) return;
-  const p = progress(data.xp);
+  const p = progress(data.xp), g = growth(data);
   $('character-label').textContent = data.name;
   $('slot-label').textContent = `SLOT 0${store.selected + 1}`;
   $('level').textContent = p.level;
   $('xp-label').textContent = `${p.current} / ${p.needed} XP`;
   $('xp-next').textContent = p.needed - p.current;
   $('xp-bar').style.width = `${p.current / p.needed * 100}%`;
-  $('rank').textContent = p.level >= 10 ? '光の騎士' : p.level >= 5 ? '森の守り人' : '見習い冒険者';
-  $('weapon').textContent = p.level >= 10 ? '暁の剣' : p.level >= 5 ? '森の騎士の剣' : '旅立ちの剣';
+  $('rank').textContent = g.title;
+  $('weapon').textContent = g.weapon;
+  renderNext();
   const regions = [['はじまりの森', '森の奥へ、一歩ずつ。'], ['風渡りの高原', '風を背に、次の場所へ。'], ['星灯りの遺跡', '積み重ねが、扉を開く。'], ['夜明けの頂', 'ここから、また冒険が始まる。']];
   const chapter = Math.floor(data.sets / 5), r = regions[chapter % regions.length];
   $('journey-number').textContent = `CHAPTER ${String(chapter + 1).padStart(2, '0')}`;
@@ -205,6 +211,44 @@ function render() {
   }
   renderCalendar(); updateSound();
 }
+function drawJobs(el,selected,onPick,hair) {
+  el.replaceChildren();
+  for(const [job,info] of Object.entries(JOBS)) {
+    const b=document.createElement('button');b.type='button';b.className='job-choice';b.setAttribute('aria-pressed',String(job===selected));b.setAttribute('aria-label',info.name+'を選ぶ');
+    const name=document.createElement('strong');name.textContent=info.name;
+    const dream=document.createElement('small');dream.textContent=info.dream;
+    b.append(portrait(job,4,hair,info.ranks[4]+'の完成形'),name,dream);b.onclick=()=>onPick(job);el.append(b);
+  }
+}
+function drawCreatorJobs(){drawJobs($('creator-jobs'),editorJob,job=>{editorJob=job;drawCreatorJobs();mountScene();},editorHair);}
+function renderNext(){
+ const g=growth(data),info=JOBS[g.job];
+ $('job-summary').textContent=`${info.name} · 職業XP ${g.xp.toLocaleString()} · 段階 ${g.stage+1}/5`;
+ $('next-portrait').replaceChildren(portrait(g.job,Math.min(4,g.stage+1),data.hair));
+ $('next-title').textContent=g.next?`次は、${info.ranks[g.stage+1]}`:`${g.title} · 熟練の星 ${g.mastery}`;
+ $('next-detail').textContent=g.next?`あと ${(g.next-g.xp).toLocaleString()} 職業XPで新しい姿へ`:'この職業を極めながら、別の職業も育てられます。';
+ $('small-reward').textContent=`次の報酬：${g.reward.name}まで ${(g.reward.xp-g.xp).toLocaleString()} XP`;
+ $('growth-bar').style.width=g.next?`${(g.xp-STAGES[g.stage])/(g.next-STAGES[g.stage])*100}%`:'100%';
+ $('medal-status').textContent=g.medals?`獲得した勲章 ${'◆'.repeat(g.medals)}`:'最初の10XPで、銅の勲章を獲得';
+}
+function renderGallery(){
+ drawJobs($('gallery-jobs'),galleryJob,job=>{galleryJob=job;galleryStage=growth(data,job).stage;renderGallery();mountScene();},data.hair);
+ const current=growth(data,galleryJob);$('stage-options').replaceChildren();
+ STAGES.forEach((xp,i)=>{
+ const b=document.createElement('button');b.className='stage-choice';b.setAttribute('aria-pressed',String(galleryStage===i));b.setAttribute('aria-label',JOBS[galleryJob].ranks[i]+'の姿を見る');
+ const title=document.createElement('strong');title.textContent=JOBS[galleryJob].ranks[i];const sub=document.createElement('small');sub.textContent=`${xp.toLocaleString()} XP · ${current.xp>=xp?'到達済み':'これから'}`;
+ b.append(portrait(galleryJob,i,data.hair),title,sub);b.onclick=()=>{galleryStage=i;renderGallery();mountScene();};$('stage-options').append(b);
+ });
+ $('gallery-caption').textContent=`${JOBS[galleryJob].ranks[galleryStage]} · ${current.xp>=STAGES[galleryStage]?'到達済みの姿':'未来の姿のプレビュー'}`;
+ $('equip-job').textContent=galleryJob===data.job?'この職業で育成中':`${JOBS[galleryJob].name}で育てる`;
+ $('equip-job').disabled=galleryJob===data.job;
+ $('gallery-progress').textContent=`保存済み：${current.xp.toLocaleString()} 職業XP ／ ${current.title}。職業を変えても進捗は残ります。`;
+}
+$('open-gallery').onclick=()=>{galleryJob=data.job;galleryStage=growth(data).stage;renderGallery();show('gallery');};
+$('gallery-back').onclick=()=>{render();show('home');};
+$('equip-job').onclick=()=>{if(writeBlocked)return toast('再読み込みしてから変更してください。');data.job=galleryJob;save();render();show('home');toast(`${JOBS[data.job].name}の育成に切り替えました。`);};
+$('preview-attack').onclick=()=>scene?.play('attack');
+$('preview-victory').onclick=()=>scene?.play('celebrate');
 function renderCalendar() {
   if (!data) return;
   const year = calendarDate.getFullYear(), month = calendarDate.getMonth(), today = localDate();
@@ -260,7 +304,7 @@ const instructions = {
 function setup(mode) {
   if (writeBlocked) return toast('別の画面の記録を読み込むため、再読み込みしてください。');
   session = { mode, amount: 0, state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
-  data.active = newActive(mode); save();
+  data.active = newActive(mode, new Date(), data.job); save();
   $('mode-title').textContent = MODES[mode].name;
   $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST' }[mode];
   $('instructions').textContent = instructions[mode];
@@ -359,7 +403,7 @@ $('counter').addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 
 function finish() {
   if (!session) return;
   pause(); clearInterval(session.timer); releaseWake();
-  const { mode, amount } = session, before = progress(data.xp).level;
+  const { mode, amount } = session, before = progress(data.xp).level, beforeGrowth=growth(data);
   persistActive(); const earned = commitActive(data); save(); session = null;
   if (!amount) { render(); show('home'); return; }
   const after = progress(data.xp).level;
@@ -367,6 +411,8 @@ function finish() {
   $('reward-xp').textContent = earned;
   $('level-up').textContent = after > before ? `LEVEL UP! Lv. ${before} → Lv. ${after}` : '経験値を獲得。着実に、強くなっている。';
   $('result-summary').textContent = `累計 ${data.sets} セット達成 ／ Lv. ${after}${storageOK ? ' · 自動保存しました' : ' · 保存できませんでした。バックアップしてください'}`;
+  const g=growth(data);
+  $('growth-reward').textContent = g.stage>beforeGrowth.stage ? `昇格！ ${g.title}になりました。新しい装備を身につけた！` : g.medals>beforeGrowth.medals ? `勲章を獲得！ ${JOBS[g.job].name}の成長が姿に刻まれました。` : `${JOBS[g.job].name} +${earned} XP · 次の${g.reward.name}まで ${Math.max(0,g.reward.xp-g.xp).toLocaleString()} XP`;
   show('result'); beep(true);
 }
 $('finish').onclick = finish;

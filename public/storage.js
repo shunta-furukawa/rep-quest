@@ -1,3 +1,4 @@
+import { ensureJobs, grantJobXp, validJob } from './progression.js';
 import { MODES, localDate, validateSave } from './engine.js';
 
 export const STORAGE_KEY = 'rep-quest:v2';
@@ -21,7 +22,7 @@ export function emptyStore() {
 export function createCharacter(name, hair, now = new Date()) {
   name = name.trim();
   if (!name || name.length > 16 || !hairValues.includes(hair)) throw new Error('Invalid character');
-  return { name, hair, configured: true, createdAt: now.toISOString(), xp: 0, sets: 0, history: [], daily: {}, undatedXp: 0 };
+  return { job: 'sword', jobs: { sword: 0, mage: 0, rogue: 0 }, name, hair, configured: true, createdAt: now.toISOString(), xp: 0, sets: 0, history: [], daily: {}, undatedXp: 0 };
 }
 function addDaily(slot, mode, amount, key) {
   const day = slot.daily[key] ??= emptyDay();
@@ -31,9 +32,9 @@ function addDaily(slot, mode, amount, key) {
   entry.xp += xp;
   day.xp += xp;
 }
-export function newActive(mode, now = new Date()) {
+export function newActive(mode, now = new Date(), job = 'sword') {
   if (!MODES[mode]) throw new Error('Unknown mode');
-  return { mode, amount: 0, days: {}, startedAt: now.toISOString(), lastAt: now.toISOString() };
+  return { job, mode, amount: 0, days: {}, startedAt: now.toISOString(), lastAt: now.toISOString() };
 }
 // Attribute each newly earned whole second/rep to its local date, even across midnight.
 export function creditAmount(active, amount, now = new Date()) {
@@ -63,6 +64,7 @@ export function commitActive(slot) {
   delete slot.active;
   if (!a.amount) return 0;
   const xp = a.amount * MODES[a.mode].xp;
+  grantJobXp(slot, xp, a.job || slot.job || 'sword');
   slot.xp += xp;
   slot.sets++;
   for (const [key, amount] of Object.entries(a.days)) addDaily(slot, a.mode, amount, key);
@@ -94,6 +96,7 @@ export function migrateLegacy(value) {
     slot.undatedXp += xp;
     slot.sets++;
   }
+  slot.jobs = { sword: slot.xp, mage: 0, rogue: 0 };
   store.slots[0] = slot;
   store.selected = 0;
   store.sound = legacy.sound !== false;
@@ -101,6 +104,10 @@ export function migrateLegacy(value) {
 }
 function validateCharacter(s) {
   if (!s || typeof s.name !== 'string' || !s.name.trim() || s.name.length > 16 || !hairValues.includes(s.hair) || typeof s.configured !== 'boolean' || !validTimestamp(s.createdAt) || !integer(s.xp) || !integer(s.sets) || !integer(s.undatedXp) || !Array.isArray(s.history) || s.history.length > 100 || !s.daily || typeof s.daily !== 'object' || Array.isArray(s.daily)) throw new Error('Invalid character');
+  if (s.jobs !== undefined || s.job !== undefined) {
+    if (!validJob(s.job) || !s.jobs || Object.keys(s.jobs).length !== 3 || !['sword','mage','rogue'].every(k => integer(s.jobs[k])) || Object.values(s.jobs).reduce((a,b) => a+b,0) !== s.xp) throw new Error('Invalid job progress');
+  }
+  ensureJobs(s);
   for (const row of s.history) {
     if (!MODES[row.mode] || !integer(row.amount, 1e7) || !integer(row.xp) || !validTimestamp(row.date)) throw new Error('Invalid history');
   }
@@ -118,6 +125,7 @@ function validateCharacter(s) {
   if (total !== s.xp) throw new Error('Invalid XP total');
   if (s.active) {
     const a = s.active;
+    if (a.job !== undefined && !validJob(a.job)) throw new Error('Invalid active job');
     if (!MODES[a.mode] || !integer(a.amount, 1e7) || !validTimestamp(a.startedAt) || !validTimestamp(a.lastAt) || !a.days || typeof a.days !== 'object') throw new Error('Invalid active set');
     let amount = 0;
     for (const [key, n] of Object.entries(a.days)) {
