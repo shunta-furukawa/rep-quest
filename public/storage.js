@@ -73,6 +73,13 @@ export function commitActive(slot) {
   slot.history = slot.history.slice(0, 100); // Daily aggregates are never truncated.
   return xp;
 }
+// Removes one slot entirely. Other slots and their records are untouched.
+export function deleteSlot(store, index) {
+  if (!integer(index, 2) || !store.slots[index]) throw new Error('Invalid slot');
+  store.slots[index] = null;
+  if (store.selected === index) store.selected = null;
+  return store;
+}
 export function migrateLegacy(value) {
   const legacy = validateSave(value);
   const store = emptyStore();

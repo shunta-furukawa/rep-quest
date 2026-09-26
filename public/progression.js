@@ -20,4 +20,9 @@ export function growth(slot, job = slot.job || 'sword') {
     reward:nextMark>=0?{xp:marks[nextMark],name:['銅の勲章','銀の勲章','金の勲章'][nextMark]}:stage<4?{xp:end,name:JOBS[job].ranks[stage+1]}:{xp:start+(Math.floor((xp-start)/12000)+1)*12000,name:'熟練の星'},
     mastery:stage===4?Math.floor((xp-start)/12000):0};
 }
+// Forms are revealed one step ahead: reached stages and the very next one are shown, later ones stay hidden.
+export function formVisibility(xp, stage) {
+  const current = STAGES.reduce((n, t, i) => xp >= t ? i : n, 0);
+  return stage <= current ? 'reached' : stage === current + 1 ? 'next' : 'hidden';
+}
 export function grantJobXp(slot,xp,job=slot.job||'sword') {ensureJobs(slot);if(!validJob(job))throw new Error('Invalid job');slot.jobs[job]+=xp;}

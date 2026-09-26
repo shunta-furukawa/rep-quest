@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCharacter, emptyStore, migrateLegacy, newActive, creditAmount, commitActive, validateStore, monthCells } from '../public/storage.js';
+import { createCharacter, deleteSlot, emptyStore, migrateLegacy, newActive, creditAmount, commitActive, validateStore, monthCells } from '../public/storage.js';
 import { localDate } from '../public/engine.js';
 
 const make = () => createCharacter('俊太', '#302824', new Date('2026-09-26T10:00:00+09:00'));
@@ -47,4 +47,14 @@ test('invalid backup totals and invalid color are rejected', () => {
   const store = emptyStore(); store.slots[0] = make(); store.slots[0].xp = 100; assert.throws(() => validateStore(store));
   assert.throws(() => createCharacter(' ', '#302824')); assert.throws(() => createCharacter('勇者', 'invalid'));
   store.slots[0] = make(); store.slots[0].active = { ...newActive('pushup'), amount: 1 }; assert.throws(() => validateStore(store));
+});
+test('deleting a slot removes only that slot and clears it as the selection', () => {
+  const store = emptyStore(); store.slots[0] = make(); store.slots[1] = createCharacter('勇者', '#dfb763'); store.selected = 1;
+  workout(store.slots[0], 'pushup', 3, new Date(2026, 8, 26, 12));
+  deleteSlot(store, 1);
+  assert.equal(store.slots[1], null); assert.equal(store.selected, null); assert.equal(store.slots[0].xp, 30);
+  validateStore(JSON.parse(JSON.stringify(store)));
+  store.selected = 0; deleteSlot(store, 0); assert.equal(store.selected, null); assert.deepEqual(store.slots, [null, null, null]);
+  assert.throws(() => deleteSlot(store, 0)); assert.throws(() => deleteSlot(store, 3));
+  validateStore(JSON.parse(JSON.stringify(store)));
 });
