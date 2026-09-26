@@ -1,3 +1,4 @@
+import { createAppUpdates } from './updates.js';
 import { createBattle, defeats } from './battle.js';
 import { JOBS, STAGES, ensureJobs, growth } from './progression.js';
 import { portrait } from './sprites.js';
@@ -10,7 +11,7 @@ let store = emptyStore(), data = null, session = null, audio = null, wake = null
 let lastTouch = -Infinity, toastTimer, storageOK = true, writeBlocked = false;
 let view = 'slots', editorIndex = 0, editorHair = HAIR_COLORS[0].value, editorJob = 'sword', galleryJob = 'sword', galleryStage = 0;
 let selectedDay = localDate(), calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-let scene = null, sceneLoad = null, currentDay = localDate();
+let scene = null, sceneLoad = null, currentDay = localDate(), appUpdates = null;
 
 function toast(message) {
   $('toast').textContent = message;
@@ -90,6 +91,7 @@ async function mountScene() {
 }
 function show(next) {
   view = next;
+  appUpdates?.refresh();
   document.body.dataset.view = next;
   $('app-nav').hidden = !['home', 'gallery', 'records', 'settings'].includes(next);
   for (const button of document.querySelectorAll('[data-screen]')) {
@@ -502,4 +504,11 @@ $('import').onchange = async event => {
 };
 renderSlots(); show('slots');
 if (recovered) toast('前回の途中までの運動を、運動した日付で記録しました。');
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+appUpdates = createAppUpdates({
+  serviceWorker: navigator.serviceWorker, button: $('app-update'), notify: toast,
+  isBusy: () => Boolean(session), reload: () => location.reload(),
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) appUpdates.check();
+});
+setInterval(() => { if (!document.hidden) appUpdates.check(); }, 5 * 60 * 1000);
