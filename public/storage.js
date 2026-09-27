@@ -153,6 +153,7 @@ function validateCharacter(s) {
 }
 export function validateStore(value) {
   if (!value || value.version !== 2 || !integer(value.revision) || typeof value.sound !== 'boolean' || !Array.isArray(value.slots) || value.slots.length !== 3 || !(value.selected === null || (integer(value.selected, 2) && value.slots[value.selected]))) throw new Error('Invalid backup');
+  if (value.shareName !== undefined && typeof value.shareName !== 'boolean') throw new Error('Invalid share setting');
   for (const s of value.slots) if (s !== null) validateCharacter(s);
   return value;
 }

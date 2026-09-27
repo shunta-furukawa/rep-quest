@@ -183,7 +183,7 @@ export function resolveSet(slot, row, rng = Math.random) {
   const best = slot.techBest[tech.id] || 0;
   if (amount > best) {
     slot.techBest[tech.id] = amount;
-    if (best) add(BONUS.best, `自己ベスト更新！ ${tech.name} ${best} → ${amount}${unit}`);
+    if (best) { add(BONUS.best, `自己ベスト更新！ ${tech.name} ${best} → ${amount}${unit}`); report.personalBest = { name: tech.name, amount, previous: best, unit }; }
     else add(0, `はじめての記録：${tech.name} ${amount}${unit}`);
   }
   report.best = slot.techBest[tech.id];
@@ -219,7 +219,7 @@ export function resolveSet(slot, row, rng = Math.random) {
 
   const body = fullBodyProgress(slot, key);
   if (body.complete && slot.fullBody !== key) {
-    slot.fullBody = key;
+    slot.fullBody = key; report.fullBody = true;
     add(BONUS.fullBody, `全身制覇！ 今日は${KEYS.length}種目すべてこなした`);
   }
 
