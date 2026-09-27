@@ -1,4 +1,4 @@
-const CACHE = 'rep-quest-v18';
+const CACHE = 'rep-quest-v18.1';
 const FILES = [
   '/art/guide/pushup-knee.webp',
   '/art/guide/pushup-wide.webp',
