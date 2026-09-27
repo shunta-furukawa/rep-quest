@@ -204,3 +204,4 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 @keyframes guide-breathe{50%{transform:scale(1.04)}}
 @media(prefers-reduced-motion:reduce){.guide-panel[data-phase=countdown] #guide-art{animation:none}}
 @media(max-height:650px){#guide-cue{font-size:17px}.guide-copy p{font-size:11px}.guide-count{font-size:34px}}
+.quest-icon img.is-painted{object-fit:contain;image-rendering:auto;filter:drop-shadow(0 1px 2px #0009)}
