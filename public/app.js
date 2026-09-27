@@ -1,7 +1,8 @@
 import { renderBestiary } from './bestiary.js';
 import { createAppUpdates } from './updates.js';
 import { bossState, createBattle, defeats } from './battle.js';
-import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, fullBodyProgress, resolveSet } from './motivation.js';
+import { BONUS, CHAPTER_BOSSES, NATIVES, REGIONS, bossOf, chapterOf, dexStats, ensureMotivation, fullBodyProgress, monster, resolveSet } from './motivation.js';
+import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf } from './story.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -95,12 +96,12 @@ function show(next) {
   view = next;
   appUpdates?.refresh();
   document.body.dataset.view = next;
-  $('app-nav').hidden = !['home', 'gallery', 'records', 'settings'].includes(next);
+  $('app-nav').hidden = !['home', 'gallery', 'dex', 'records', 'settings'].includes(next);
   for (const button of document.querySelectorAll('[data-screen]')) {
     if (button.dataset.screen === next) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery', 'records', 'settings']) $(id).hidden = id !== view;
+  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery', 'dex', 'records', 'settings']) $(id).hidden = id !== view;
   $(next).scrollTop = 0;
   window.scrollTo(0, 0);
   mountScene();
@@ -189,7 +190,36 @@ $('character-form').onsubmit = event => {
   else store.slots[editorIndex] = createCharacter(name, editorHair);
   store.selected = editorIndex; data = store.slots[editorIndex]; ensureJobs(data); data.job=editorJob; save();
   render(); show('home');
+  if (!existing) openStory();
 };
+// The story sheet: where the adventurer is, where the road leads, and the beacons relit so far.
+let pendingStory = false;
+function openStory(arrived = false) {
+  const c = chapterOf(data), story = REGION_STORY[c.region], dest = destinationOf(c.chapter), depth = Math.floor(c.chapter / REGIONS.length);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const sections = [];
+  if (arrived && c.chapter > 0) sections.push(el('p', 'story-cleared', REGION_STORY[(c.chapter - 1) % REGION_STORY.length].cleared));
+  const now = el('section', 'story-now');
+  now.append(el('small', 'eyebrow', `CHAPTER ${String(c.chapter + 1).padStart(2, '0')} · 現在地`), el('h3', '', c.name), el('p', 'story-epithet', story.title), el('p', '', depth ? `${story.arrival} ${DEPTH_NOTE}` : story.arrival));
+  const left = CHAPTER_BOSSES - c.progress;
+  now.append(el('p', 'story-beacon', `灯標 ${'◆'.repeat(c.progress)}${'◇'.repeat(left)} · あと${left}体の魔物を鎮めると灯る`));
+  now.append(el('p', 'story-natives', `この地の魔物：${NATIVES[c.region].map(f => { const m = monster(f, c.region); return data.dex[m.id] ? m.name : '？？？'; }).join('、')}`));
+  const next = el('section', 'story-next');
+  next.append(el('small', 'eyebrow', '次の目的地'), el('h3', '', `${REGIONS[dest.region][0]}${dest.depth ? ` · 深層${dest.depth}` : ''}`), el('p', '', REGIONS[dest.region][1]));
+  const log = el('details', 'story-log'); log.append(el('summary', '', 'これまでの旅'));
+  const opening = el('div', 'story-entry'); opening.append(el('strong', '', 'はじまり'), ...PROLOGUE.map(t => el('p', '', t))); log.append(opening);
+  for (let i = 0; i < Math.min(c.chapter, REGION_STORY.length); i++) {
+    const done = el('div', 'story-entry'); done.append(el('strong', '', `${REGIONS[i][0]} · 灯標を灯した`), el('p', '', REGION_STORY[i].cleared)); log.append(done);
+  }
+  log.open = c.chapter === 0 && !arrived;
+  sections.push(now, next, log);
+  $('story-title').textContent = arrived ? '新しいエリアに到着' : '冒険の物語';
+  $('story-body').replaceChildren(...sections);
+  $('story-dialog').showModal();
+  $('story-body').scrollTop = 0;
+}
+$('journey-strip').onclick = () => openStory();
+$('close-story').onclick = () => $('story-dialog').close();
 let deleteIndex = null;
 function askDelete(index) {
   const slot = store.slots[index];
@@ -231,11 +261,14 @@ function render() {
   $('rank').textContent = g.title;
   $('weapon').textContent = g.weapon;
   renderNext();
-  const c = chapterOf(data);
-  $('journey-number').textContent = `CHAPTER ${String(c.chapter + 1).padStart(2, '0')}`;
-  $('region-label').textContent = c.name; $('region-title').textContent = c.line;
-  $('route').innerHTML = Array.from({ length: CHAPTER_BOSSES }, (_, i) => `<span class="${i < c.progress ? 'done' : i === c.progress ? 'current' : ''}">${i < c.progress ? '✓' : i + 1}</span>`).join('');
-  $('journey-detail').textContent = `あと ${CHAPTER_BOSSES - c.progress} 体のボスを倒すと、次のエリアへ。`;
+  const c = chapterOf(data), dest = destinationOf(c.chapter);
+  $('journey-number').textContent = `CHAPTER ${String(c.chapter + 1).padStart(2, '0')} · 現在地`;
+  $('region-label').textContent = c.name;
+  $('region-next').textContent = `${REGIONS[dest.region][0]}${dest.depth ? ` · 深層${dest.depth}` : ''}`;
+  $('route').replaceChildren(...Array.from({ length: CHAPTER_BOSSES }, (_, i) => { const pip = document.createElement('i'); if (i < c.progress) pip.className = 'lit'; return pip; }));
+  $('journey-strip').setAttribute('aria-label', `現在地 ${c.name}、次の目的地 ${$('region-next').textContent}、灯標 ${c.progress}/${CHAPTER_BOSSES}。冒険の物語を開く`);
+  // Region backdrops are optional art; a missing file falls through to the guild background layered beneath.
+  document.documentElement.style.setProperty('--region-art', `url('/art/regions/${REGION_STORY[c.region].id}.webp')`);
   const q = data.quest, qUnit = MODES[q.mode].unit, qDone = data.daily[q.day]?.byMode[q.mode]?.amount || 0;
   $('today-quest').textContent = q.done ? `依頼達成 ✓ ${MODES[q.mode].name} ${q.target}${qUnit}` : `今日の依頼：${MODES[q.mode].name} ${Math.min(qDone, q.target)}/${q.target}${qUnit} · +${BONUS.quest}XP`;
   const body = fullBodyProgress(data, localDate());
@@ -251,8 +284,11 @@ function render() {
     const d = document.createElement('div'), label = document.createElement('small'), value = document.createElement('strong');
     label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
   }));
-  $('dex-count').textContent = `${BESTIARY.filter(m => data.dex[m.id]).length} / ${BESTIARY.length} 種`;
-  renderBestiary($('bestiary'), data.dex);
+  const ds = dexStats(data.dex);
+  $('dex-stats').replaceChildren(...[['発見', `${ds.found} / ${ds.total}`], ['累計撃破', `${ds.defeats.toLocaleString()} 体`], ['レア撃破', `${ds.rares} 体`]].map(([label, value]) => {
+    const d = document.createElement('div'), k = document.createElement('small'), v = document.createElement('strong'); k.textContent = label; v.textContent = value; d.append(k, v); return d;
+  }));
+  renderBestiary($('bestiary'), data.dex, { grouped: true, current: c.region });
   const items = Object.entries(data.items);
   $('item-stats').textContent = items.length ? `戦利品：${items.map(([k, n]) => `${k} ×${n}`).join('、')}` : 'ボスを倒すと戦利品が手に入ります。まれに星のかけらも。';
   $('total-label').textContent = `${data.sets} セット達成`;
@@ -514,7 +550,8 @@ function finish() {
   $('reward-xp').textContent = earned;
   const lines = [{ text: `${MODES[mode].name} ${amount}${unit}`, xp: base }, ...report.lines];
   if (report.drops.length) lines.push({ text: `戦利品：${report.drops.join('、')}`, xp: 0 });
-  if (report.chapterUp) lines.push({ text: `新しいエリアへ：${chapterOf(data).name}`, xp: 0 });
+  if (report.chapterUp) lines.push({ text: `灯標が灯った！ 次のエリアへ：${chapterOf(data).name}`, xp: 0 });
+  pendingStory = report.chapterUp;
   $('result-lines').replaceChildren(...lines.map(({ text, xp }) => {
     const li = document.createElement('li'), label = document.createElement('span'); label.textContent = text; li.append(label);
     if (xp) { const value = document.createElement('strong'); value.textContent = `+${xp} XP`; li.append(value); }
@@ -528,14 +565,14 @@ function finish() {
 }
 $('finish').onclick = finish;
 $('back').onclick = () => { if (session) finish(); };
-$('return').onclick = () => { selectedDay = localDate(); render(); show('home'); };
+$('return').onclick = () => { selectedDay = localDate(); render(); show('home'); if (pendingStory) { pendingStory = false; openStory(true); } };
 function refreshDate() {
   const today = localDate();
   if (currentDay !== today) {
     if (selectedDay === currentDay) selectedDay = today;
     const old = currentDay; currentDay = today;
     if (old.slice(0, 7) !== today.slice(0, 7)) calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    if (['home', 'records', 'settings'].includes(view)) render();
+    if (['home', 'dex', 'records', 'settings'].includes(view)) render();
   }
 }
 setInterval(refreshDate, 30000);

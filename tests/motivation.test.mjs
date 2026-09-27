@@ -209,3 +209,21 @@ test('doing every exercise on one day pays the full-body bonus once', () => {
   check(s);
   const bad = JSON.parse(JSON.stringify(s)); bad.fullBody = 'yesterday'; assert.throws(() => check(bad));
 });
+test('bestiary totals count discoveries, every defeat and golden rares', async () => {
+  const { dexStats, REGIONS } = await import('../public/motivation.js');
+  assert.deepEqual(dexStats({}), { found: 0, total: BESTIARY.length, defeats: 0, rares: 0 });
+  assert.deepEqual(dexStats({ 'slime-0': 3, 'wolf-1': 1, 'bat-rare': 2 }), { found: 3, total: BESTIARY.length, defeats: 6, rares: 2 });
+  assert.equal(BESTIARY.filter(m => m.region === 0).length, FAMILIES.length);
+  assert.equal(BESTIARY.filter(m => m.rare).every(m => m.region === null), true);
+  assert.equal(REGIONS.length, 6);
+});
+test('every region has a story and backdrop id, and the destination wraps into deeper strata', async () => {
+  const { REGION_STORY, destinationOf } = await import('../public/story.js');
+  const { REGIONS } = await import('../public/motivation.js');
+  assert.equal(REGION_STORY.length, REGIONS.length);
+  assert.equal(new Set(REGION_STORY.map(r => r.id)).size, REGIONS.length);
+  assert.ok(REGION_STORY.every(r => /^[a-z]+$/.test(r.id) && r.arrival && r.cleared && r.title));
+  assert.deepEqual(destinationOf(0), { region: 1, depth: 0 });
+  assert.deepEqual(destinationOf(5), { region: 0, depth: 1 });
+  assert.deepEqual(destinationOf(6), { region: 1, depth: 1 });
+});

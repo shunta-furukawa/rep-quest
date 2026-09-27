@@ -8,7 +8,7 @@ const LEGACY_FAMILIES = ['slime', 'bat', 'golem'];
 export const FAMILIES = [...LEGACY_FAMILIES, 'mushroom', 'wolf', 'skeleton', 'wisp', 'mimic', 'dragon'];
 // Native species have weight 8, visiting species weight 1 (80% / 20%).
 // Every variant remains obtainable; adding a family does not strand dex entries.
-const NATIVES = [
+export const NATIVES = [
   ['slime', 'mushroom', 'bat'], ['wolf', 'bat', 'golem'],
   ['wisp', 'wolf', 'golem'], ['skeleton', 'mimic', 'wisp'],
   ['dragon', 'golem', 'skeleton'], ['dragon', 'wisp', 'mimic'],
@@ -39,7 +39,14 @@ export function monster(family, element = 0, rare = false) {
   const [name, drop, filter] = rare ? [...GOLDEN[family], GOLD_FILTER] : VARIANTS[element][family];
   return { id: `${family}-${rare ? 'rare' : element}`, sprite: family, name, drop, filter, rare };
 }
-export const BESTIARY = [...VARIANTS.flatMap((_, e) => FAMILIES.map(f => monster(f, e))), ...FAMILIES.map(f => monster(f, 0, true))];
+export const BESTIARY = [...VARIANTS.flatMap((_, e) => FAMILIES.map(f => ({ ...monster(f, e), region: e }))), ...FAMILIES.map(f => ({ ...monster(f, 0, true), region: null }))];
+// Collection totals for the bestiary screen; every dex count is one defeated boss.
+export function dexStats(dex = {}) {
+  const found = BESTIARY.filter(m => dex[m.id]).length;
+  const defeats = Object.values(dex).reduce((n, v) => n + v, 0);
+  const rares = BESTIARY.filter(m => m.rare).reduce((n, m) => n + (dex[m.id] || 0), 0);
+  return { found, total: BESTIARY.length, defeats, rares };
+}
 export const RARE_DROP = '星のかけら';
 export const TUNING = { pushup: { min: 5, step: 1, quest: 10 }, squat: { min: 8, step: 1, quest: 15 }, plank: { min: 20, step: 5, quest: 30 }, superman: { min: 15, step: 5, quest: 30 } };
 export const BONUS = { boss: 50, best: 30, quest: 100, fullBody: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };

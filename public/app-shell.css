@@ -102,3 +102,50 @@ canvas.is-silhouette,.scene-mount .hero-sprite.is-silhouette{filter:drop-shadow(
 #home .quest-copy small{display:none}#home .quest-copy strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}#home .quest-copy{flex:1}
 #home .quest-copy strong{letter-spacing:0}#home .quest.is-request:after,#home .quest.done-today:before{top:-9px;line-height:16px}
 #home .quest.is-request:after{font-size:8px;padding:0 4px;line-height:14px;top:-8px;right:4px}@media(max-width:380px){#home .quest-copy strong{font-size:13px}#home .quest-boss{font-size:8px}}
+
+/* v0.11: five-tab nav, journey strip, region backdrops, bestiary tab and story sheet. */
+#app-nav{grid-template-columns:repeat(5,1fr)}
+#app-nav button[aria-current=page]:before{left:20%;right:20%}
+/* The region art layers above the guild art; when it is missing the guild shows through. */
+body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art,none) center top/cover,url('/art/guild-dusk.webp') center top/cover}
+.character-scene,.result-scene{background:linear-gradient(0deg,#07131ff0,transparent 44%,#07131f20),var(--region-art,none) center 42%/cover,url('/art/guild-dusk.webp') center 42%/cover}
+
+.journey-strip{flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto;align-items:center;gap:8px;width:100%;padding:6px 10px;border:1px solid #b8995e66;background:linear-gradient(90deg,#0d2533e6,#0a1b28e6);color:#e8d6b8;text-align:left;font:inherit}
+.journey-strip small{display:block;font-size:8px;letter-spacing:1px;color:#9fb3bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.journey-strip strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"Hiragino Mincho ProN","Yu Mincho",serif}
+.journey-now strong{color:#f1d395}
+.journey-next strong{color:#9fe3e8;font-size:13px}
+.journey-arrow{color:#e3bc76;font-size:20px;line-height:1}
+.journey-beacon{text-align:center}
+.beacon-pips{display:flex;gap:3px;justify-content:center;margin-top:3px}
+.beacon-pips i{width:9px;height:9px;transform:rotate(45deg);border:1px solid #e3bc7699;background:transparent}
+.beacon-pips i.lit{background:#f1d395;box-shadow:0 0 6px #f1d395aa}
+
+#dex{display:flex;flex-direction:column;gap:10px;padding:8px 0;overflow-y:auto}
+.dex-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.dex-stats div{padding:8px;border:1px solid #a9855044;background:#0c1d28b3;text-align:center}
+.dex-stats small{display:block;font-size:10px;color:#9fb3bb}
+.dex-stats strong{display:block;font-size:18px;color:#f1d395;font-family:Georgia,serif;font-weight:400;white-space:nowrap}
+.dex-groups{display:grid;gap:14px}
+.dex-group-head{display:flex;justify-content:space-between;align-items:baseline;margin:0 2px 6px;border-bottom:1px solid #a9855033;padding-bottom:4px}
+.dex-group-head h3{margin:0;font-size:14px;color:#e8d6b8}
+.dex-group-head span{font-size:11px;color:#9fb3bb}
+.dex-group.is-here .dex-group-head h3{color:#f1d395}
+.dex-group.is-rare .dex-group-head h3{color:#ffe29a}
+
+#story-dialog{width:min(460px,calc(100% - 32px));max-width:none;max-height:min(80dvh,640px);padding:18px;border:1px solid #b8995e99;background:#0b1a28;color:#e8d6b8;box-shadow:0 18px 50px #000a;overflow:auto}
+#story-dialog::backdrop{background:#020a10cc}
+#story-dialog .sheet-heading h2{margin:0;color:#f1d395}
+.story-body{display:grid;gap:14px;font-size:13px;line-height:1.8}
+.story-body h3{margin:2px 0 0;font-size:20px;color:#f1d395}
+.story-body p{margin:4px 0 0;color:#dfe6e3}
+.story-epithet{color:#9fe3e8!important;font-size:12px}
+.story-cleared{padding:10px 12px;border-left:2px solid #f1d395;background:#f1d3950f}
+.story-beacon{color:#f1d395!important}
+.story-natives{font-size:12px;color:#b8c7cc!important}
+.story-next{padding-top:10px;border-top:1px solid #a9855033}
+.story-next h3{font-size:16px;color:#9fe3e8}
+.story-log summary{cursor:pointer;color:#e3bc76;font-size:13px}
+.story-entry{margin-top:10px}
+.story-entry strong{font-size:12px;color:#e8d6b8}
+@media(max-height:650px){.journey-strip{padding:4px 8px}.journey-strip strong{font-size:12px}}
