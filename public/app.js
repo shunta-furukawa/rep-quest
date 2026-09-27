@@ -476,6 +476,12 @@ function setup(mode) {
   updateCount(false); show('workout');
 }
 document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setup(b.dataset.mode));
+// Painted quest icons at /art/quest/<mode>.webp are optional; the SVG pictograms stay until one loads.
+for (const img of document.querySelectorAll('.quest-icon img')) {
+  const painted = new Image(), mode = img.closest('[data-mode]').dataset.mode;
+  painted.onload = () => { img.src = painted.src; img.classList.add('is-painted'); };
+  painted.src = `/art/quest/${mode}.webp`;
+}
 async function keepAwake() {
   try { if ('wakeLock' in navigator) { const lock = await navigator.wakeLock.request('screen'); if (!session || !['countdown', 'running'].includes(session.state)) lock.release().catch(() => {}); else wake = lock; } } catch {}
 }
