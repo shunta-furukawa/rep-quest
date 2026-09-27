@@ -240,3 +240,8 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 #gallery-lineage{width:100%;margin-top:6px}
 @media(max-height:650px){#tech-name{font-size:13px}.tech-picker{padding:3px 6px}#open-lineage{min-height:22px}}
 #lineage-dialog .sheet-heading{position:sticky;top:-18px;z-index:1;margin:-18px -18px 10px;padding:14px 18px 10px;background:#0b1a28;border-bottom:1px solid #a9855033}
+/* Before a set the picker already names the technique, so the heading gives its room to the art.
+   On short screens the form line also steps aside; it stays readable in the lineage sheet. */
+.guide-panel[data-phase=ready] #guide-cue{display:none}
+@media(max-height:700px){.guide-panel[data-phase=ready] #guide-form{display:none}}
+.guide-figure{min-height:90px}
