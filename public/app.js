@@ -4,7 +4,8 @@ import { bossState, createBattle, defeats } from './battle.js';
 import { BONUS, CHAPTER_BOSSES, NATIVES, REGIONS, bossOf, chapterOf, dexStats, ensureMotivation, fullBodyProgress, monster, resolveSet } from './motivation.js';
 import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf, regionState } from './story.js';
 import { renderWorldMap } from './worldmap.js';
-import { GUIDE, countdownOf, cueAt } from './guide.js';
+import { countdownOf, cueAt, guideFor } from './guide.js';
+import { LINEAGES, MASTERY_SETS, damageOf, isUnlocked, ladderOf, switchAt, techOf } from './techniques.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -306,7 +307,8 @@ function render() {
   for (const b of document.querySelectorAll('[data-mode]')) { b.classList.toggle('is-request', b.dataset.mode === q.mode && !q.done); b.classList.toggle('done-today', body.done.includes(b.dataset.mode)); }
   $('best-stats').replaceChildren(...Object.entries(MODES).map(([m, info]) => {
     const d = document.createElement('div'), label = document.createElement('small'), value = document.createElement('strong');
-    label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
+    const cur = techOf(data.tech[m].current);
+    label.textContent = cur.name; value.textContent = `${data.techBest[cur.id] || 0}${info.unit}`; d.append(label, value); return d;
   }));
   const ds = dexStats(data.dex);
   $('dex-stats').replaceChildren(...[['発見', `${ds.found} / ${ds.total}`], ['累計撃破', `${ds.defeats.toLocaleString()} 体`], ['レア撃破', `${ds.rares} 体`]].map(([label, value]) => {
@@ -333,7 +335,7 @@ function render() {
   for (const row of data.history.slice(0, 5)) {
     const e = document.createElement('div'); e.className = 'history-row';
     const left = document.createElement('div'), small = document.createElement('small'), right = document.createElement('span');
-    left.textContent = `${MODES[row.mode].name} ${row.amount}${MODES[row.mode].unit}${row.boss ? ' · ボス撃破' : ''}`;
+    left.textContent = `${techOf(row.tech || row.mode).name} ${row.amount}${MODES[row.mode].unit}${row.boss ? ' · ボス撃破' : ''}`;
     small.textContent = new Date(row.date).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     left.append(small); right.textContent = `+${row.xp} XP`; e.append(left, right); $('history').append(e);
   }
@@ -459,8 +461,9 @@ const instructions = {
 function setup(mode) {
   if (writeBlocked) return toast('別の画面の記録を読み込むため、再読み込みしてください。');
   ensureMotivation(data);
-  session = { mode, amount: 0, kills: 0, defeated: false, boss: bossOf(data, mode), state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
-  data.active = newActive(mode, new Date(), data.job); save();
+  const tech = data.tech[mode].current;
+  session = { mode, tech, amount: 0, kills: 0, defeated: false, switched: false, boss: bossOf(data, mode), state: 'ready', elapsed: 0, timer: null, detector: detectorFor(tech), lastSensor: 0 };
+  data.active = newActive(mode, new Date(), data.job, tech); save();
   $('mode-title').textContent = MODES[mode].name;
   $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST', superman: 'GUARDIAN QUEST' }[mode];
   $('instructions').textContent = instructions[mode];
@@ -470,7 +473,7 @@ function setup(mode) {
   $('unit').textContent = MODES[mode].unit;
   battle.reset(data.job, session.boss);
   $('status').textContent = '準備できたら、はじめよう'; $('sensor-status').textContent = '';
-  showGuide(mode, 'ready');
+  showGuide(tech, 'ready');
   $('counter').disabled = true;
   $('counter').setAttribute('aria-label', mode === 'pushup' ? '腕立てを1回カウント' : '運動のカウント');
   updateCount(false); show('workout');
@@ -490,11 +493,14 @@ function persistActive() {
   if (data?.active && session) { creditAmount(data.active, session.amount); save(); }
 }
 function updateCount(impact = true) {
-  const { mode, amount, boss } = session, unit = MODES[mode].unit, best = data.best[mode];
-  const st = bossState(boss, amount), hits = defeats(mode, amount), previous = session.kills, justDefeated = st.defeated && !session.defeated;
+  const { mode, tech, amount, boss } = session, unit = MODES[mode].unit, best = data.techBest[tech] || 0, damage = damageOf(tech, amount);
+  const st = bossState(boss, damage), hits = defeats(mode, amount), previous = session.kills, justDefeated = st.defeated && !session.defeated;
   session.kills = hits; session.defeated = st.defeated;
   $('count').textContent = amount;
-  $('raw-count').textContent = st.defeated ? `ボス撃破！ オーバーキル +${st.overkill}${unit}` : `ボスに ${amount} ダメージ · 残りHP ${st.hp}`;
+  $('raw-count').textContent = st.defeated ? `ボス撃破！ オーバーキル +${st.overkill}` : `ボスに ${damage} ダメージ · 残りHP ${st.hp}`;
+  // Unilateral techniques: halfway through the target range, switch sides.
+  const half = switchAt(tech);
+  if (impact && half && amount >= half && !session.switched) { session.switched = true; say('左右を入れ替え'); $('battle-feedback').textContent = '左右を入れ替え！'; }
   $('enemy-hp').style.width = `${st.hp / st.max * 100}%`;
   const record = best && amount > best ? '自己ベスト更新中！' : best ? `自己ベスト ${best}${unit}` : 'はじめての記録に挑戦';
   $('enemy-label').textContent = `${st.defeated ? '撃破！ ここからはオーバーキル' : boss.hp < boss.max && !amount ? `前回の残りHP ${st.hp}。倒しきろう` : `HP ${st.hp}/${st.max}`} · ${record}`;
@@ -519,7 +525,7 @@ async function start() {
   if (!session || !['ready', 'paused'].includes(session.state) || writeBlocked) return;
   const current = session; unlockAudio(); $('start').disabled = true;
   // Speaking inside the tap unlocks speech on iOS; later cues then play from the countdown timer.
-  say(GUIDE[current.mode].cues[0]);
+  say(guideFor(current.tech).cues[0]);
   if (current.mode === 'squat') {
     try {
       if (!window.DeviceMotionEvent) throw new Error('unsupported');
@@ -531,30 +537,97 @@ async function start() {
   }
   if (session !== current || document.hidden) { $('start').disabled = false; return; }
   current.state = 'countdown'; keepAwake(); current.countdown = performance.now();
-  current.detector = new RepDetector(Number($('sensitivity').value));
+  current.detector = detectorFor(current.tech);
   $('sensitivity').disabled = true; $('start').hidden = true; $('pause').hidden = false;
-  $('finish').hidden = false; $('status').textContent = `準備 · ${countdownOf(current.mode)}`;
-  current.cueIndex = 0; showGuide(current.mode, 'countdown');
+  $('finish').hidden = false; $('status').textContent = `準備 · ${countdownOf(current.tech)}`;
+  current.cueIndex = 0; showGuide(current.tech, 'countdown');
   $('sensor-status').textContent = current.mode === 'squat' ? 'センサー接続を確認中…' : '';
   current.timer = setInterval(tick, 100);
 }
 // Guide panel over the battle arena: the full setup card before starting, one big cue per second while counting down.
-function showGuide(mode, phase) {
-  const g = GUIDE[mode], art = $('guide-art');
-  art.onerror = () => { art.onerror = null; art.src = `/art/${mode}.svg`; art.classList.add('is-icon'); };
-  art.classList.remove('is-icon'); art.src = `/art/guide/${mode}.webp`; art.alt = `${MODES[mode].name}の構えとスマホの置き場所`;
-  // An optional second frame (/art/guide/<mode>-2.webp, the end of the movement) alternates with the first to show motion.
-  const second = $('guide-art-2'), frame = new Image();
-  second.hidden = true; $('guide-panel').classList.remove('is-moving');
-  frame.onload = () => { if ($('guide-panel').dataset.mode !== mode) return; second.src = frame.src; second.hidden = false; $('guide-panel').classList.add('is-moving'); };
-  frame.src = `/art/guide/${mode}-2.webp`;
-  $('guide-panel').dataset.mode = mode;
-  $('guide-panel').dataset.phase = phase;
-  $('guide-cue').textContent = phase === 'ready' ? `${MODES[mode].name}の準備` : g.cues[0];
-  $('guide-phone').textContent = g.phone; $('guide-form').textContent = g.form;
-  $('guide-count').textContent = phase === 'countdown' ? countdownOf(mode) : '';
-  $('guide-panel').hidden = false;
+// Art falls back from the technique to its exercise, then to the quest icon.
+const loadable = src => new Promise(resolve => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = src; });
+async function guideArt(tech) {
+  const g = guideFor(tech), panel = $('guide-panel'), art = $('guide-art'), second = $('guide-art-2');
+  second.hidden = true; panel.classList.remove('is-moving');
+  art.alt = `${g.name}の構えとスマホの置き場所`;
+  for (const base of [...new Set([tech, g.mode])]) {
+    if (!await loadable(`/art/guide/${base}.webp`)) continue;
+    if (panel.dataset.tech !== tech) return;
+    art.classList.remove('is-icon'); art.src = `/art/guide/${base}.webp`;
+    // An optional second frame (the end of the movement) alternates with the first to show motion.
+    if (await loadable(`/art/guide/${base}-2.webp`) && panel.dataset.tech === tech) { second.src = `/art/guide/${base}-2.webp`; second.hidden = false; panel.classList.add('is-moving'); }
+    return;
+  }
+  if (panel.dataset.tech === tech) { art.classList.add('is-icon'); art.src = `/art/${g.mode}.svg`; }
 }
+function showGuide(tech, phase) {
+  const g = guideFor(tech), panel = $('guide-panel');
+  if (panel.dataset.tech !== tech) { panel.dataset.tech = tech; guideArt(tech); }
+  panel.dataset.phase = phase;
+  $('guide-cue').textContent = phase === 'ready' ? `${g.name}の準備` : g.cues[0];
+  $('guide-phone').textContent = g.phone; $('guide-form').textContent = g.form;
+  $('guide-count').textContent = phase === 'countdown' ? countdownOf(tech) : '';
+  renderTechPicker();
+  panel.hidden = false;
+}
+// Squat detection is tuned per technique on top of the user's sensitivity choice.
+function detectorFor(tech) {
+  const sensor = techOf(tech).sensor || {};
+  return new RepDetector(Number($('sensitivity').value) * (sensor.scale || 1), { maxMs: sensor.maxMs });
+}
+// Technique picker (before a set only) and the full lineage sheet.
+function techStatus(mode, t) {
+  const p = data.tech[mode], done = p.mastery[t.id] || 0, unit = MODES[mode].unit;
+  if (!isUnlocked(p.mastery, mode, t.index)) return { locked: true, text: '未習得' };
+  // A technique counts as mastered once the next one is open (including those below the standard).
+  const next = ladderOf(mode)[t.index + 1];
+  if (done >= MASTERY_SETS || (next && isUnlocked(p.mastery, mode, next.index))) return { text: '習得済み' };
+  return { text: `習得の証 ${done}/${MASTERY_SETS}（${t.range.max}${unit}以上）` };
+}
+function renderTechPicker() {
+  if (!session) return;
+  const { mode, tech } = session, t = techOf(tech), ladder = ladderOf(mode), unit = MODES[mode].unit, next = ladder[t.index + 1];
+  const editable = session.state === 'ready' && !session.amount;
+  $('tech-picker').hidden = !editable;
+  $('tech-name').textContent = t.name;
+  $('tech-meta').textContent = `目標 ${t.range.min}〜${t.range.max}${unit} · 威力×${t.weight} · ${techStatus(mode, t).text}`;
+  $('tech-prev').disabled = t.index === 0;
+  $('tech-next').disabled = !next || !isUnlocked(data.tech[mode].mastery, mode, t.index + 1);
+  $('tech-next').setAttribute('aria-label', next ? `次の技 ${next.name}${$('tech-next').disabled ? '（未習得）' : ''}` : '次の技はありません');
+}
+function pickTech(step) {
+  if (!session || session.state !== 'ready' || session.amount) return;
+  const t = techOf(session.tech), target = ladderOf(session.mode)[t.index + step];
+  if (!target || !isUnlocked(data.tech[session.mode].mastery, session.mode, target.index)) return;
+  data.tech[session.mode].current = target.id; session.tech = target.id; data.active.tech = target.id;
+  session.detector = detectorFor(target.id); session.switched = false; save();
+  showGuide(target.id, 'ready'); updateCount(false);
+}
+$('tech-prev').onclick = () => pickTech(-1);
+$('tech-next').onclick = () => pickTech(1);
+function openLineage(focus) {
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  $('lineage-body').replaceChildren(...Object.entries(LINEAGES).map(([mode, ladder]) => {
+    const section = el('section', `lineage${mode === focus ? ' is-focus' : ''}`), unit = MODES[mode].unit;
+    section.append(el('h3', '', MODES[mode].name));
+    const list = el('ol', 'lineage-steps');
+    for (const t of ladder) {
+      const st = techStatus(mode, t), li = el('li', `${st.locked ? 'locked' : ''}${data.tech[mode].current === t.id ? ' current' : ''}`);
+      li.append(el('strong', '', t.name), el('small', '', `${t.range.min}〜${t.range.max}${unit} · 威力×${t.weight}${t.sides ? ' · 左右' : ''} · ${data.tech[mode].current === t.id ? '修行中 · ' : ''}${st.text}`));
+      li.append(el('p', '', t.form));
+      list.append(li);
+    }
+    section.append(list); return section;
+  }));
+  $('lineage-dialog').showModal();
+  // Scroll to the exercise in focus, leaving its heading clear of the sticky sheet header.
+  const focusSection = $('lineage-body').querySelector('.is-focus'), sheet = $('lineage-dialog');
+  sheet.scrollTop = focusSection ? focusSection.offsetTop - sheet.querySelector('.sheet-heading').offsetHeight - 8 : 0;
+}
+$('open-lineage').onclick = () => openLineage(session?.mode);
+$('close-lineage').onclick = () => $('lineage-dialog').close();
+$('gallery-lineage').onclick = () => openLineage(null);
 function hideGuide() { $('guide-panel').hidden = true; }
 // Short spoken cues follow the sound setting; unsupported browsers simply stay silent.
 function say(text) {
@@ -565,12 +638,12 @@ function tick() {
   if (!session) return;
   const now = performance.now();
   if (session.state === 'countdown') {
-    const left = countdownOf(session.mode) - Math.floor((now - session.countdown) / 1000);
+    const left = countdownOf(session.tech) - Math.floor((now - session.countdown) / 1000);
     $('status').textContent = `準備 · ${Math.max(1, left)}`;
     $('guide-count').textContent = Math.max(1, left);
     // The first cue was spoken on tap; each later second speaks its own cue once.
     const cueIndex = Math.floor((now - session.countdown) / 1000);
-    if (cueIndex !== session.cueIndex && cueIndex < countdownOf(session.mode)) { session.cueIndex = cueIndex; const cue = cueAt(session.mode, now - session.countdown); $('guide-cue').textContent = cue; say(cue); }
+    if (cueIndex !== session.cueIndex && cueIndex < countdownOf(session.tech)) { session.cueIndex = cueIndex; const cue = cueAt(session.tech, now - session.countdown); $('guide-cue').textContent = cue; say(cue); }
     if (left <= 0) {
       if (session.mode === 'squat' && now - session.lastSensor > 1500) { pause(); $('sensor-status').textContent = 'センサーの値が届いていません。許可・端末を確認して再開してください。'; return; }
       session.state = 'running'; session.segment = now; session.detector.reset(); hideGuide();
@@ -591,7 +664,7 @@ function tick() {
 function pause() {
   if (!session || !['running', 'countdown'].includes(session.state)) return;
   if (session.state === 'running' && MODES[session.mode].timer) { session.elapsed += performance.now() - session.segment; session.amount = Math.floor(session.elapsed / 1000); updateCount(false); }
-  session.state = 'paused'; clearInterval(session.timer); releaseWake(); scene?.setMode('idle'); window.speechSynthesis?.cancel(); showGuide(session.mode, 'ready');
+  session.state = 'paused'; clearInterval(session.timer); releaseWake(); scene?.setMode('idle'); window.speechSynthesis?.cancel(); showGuide(session.tech, 'ready');
   $('counter').disabled = true; $('status').textContent = '一時停止中'; $('pause').hidden = true;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = '再開する'; $('sensitivity').disabled = false; persistActive();
 }
@@ -607,9 +680,9 @@ function finish() {
   if (!amount) { render(); show('home'); return; }
   const after = progress(growth(data).xp).level, earned = base + report.bonus, unit = MODES[mode].unit;
   $('result-title').textContent = report.boss.defeated ? 'ボスを撃破した！' : '今日の一歩が、力になる。';
-  $('result-description').textContent = `${MODES[mode].name} ${amount}${unit} 達成`;
+  $('result-description').textContent = `${techOf(report.tech.id).name} ${amount}${unit} 達成`;
   $('reward-xp').textContent = earned;
-  const lines = [{ text: `${MODES[mode].name} ${amount}${unit}`, xp: base }, ...report.lines];
+  const lines = [{ text: `${techOf(report.tech.id).name} ${amount}${unit}`, xp: base }, ...report.lines];
   if (report.drops.length) lines.push({ text: `戦利品：${report.drops.join('、')}`, xp: 0 });
   if (report.chapterUp) lines.push({ text: `灯標が灯った！ 次のエリアへ：${chapterOf(data).name}`, xp: 0 });
   pendingStory = report.chapterUp;
