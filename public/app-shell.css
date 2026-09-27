@@ -182,3 +182,25 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 .map-note{margin:0;font-size:10px;text-align:center}
 @keyframes beacon-pulse{50%{box-shadow:0 0 0 5px #f1d39533,0 0 12px #f1d39588}}
 @media(prefers-reduced-motion:reduce){.map-island.current .map-beacon{animation:none}}
+/* With painted islands, names sit in the reserved cloud band ~9% of map height below each beacon
+   (button height is 15% of the map; 104% of it clears the painted island), on a soft plate for legibility.
+   The map keeps at least 280px of width on short screens so the lowest name stays inside the frame. */
+.world-map.has-art .map-label{top:104%;padding:1px 7px 2px;background:#061220b8;border-radius:2px;box-shadow:0 0 8px #061220}
+.world-map{min-width:min(100%,280px)}
+
+/* v0.13 pre-set guide: covers the battle until the set starts. Art at /art/guide/<mode>.webp, quest icon as fallback. */
+.guide-panel{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:radial-gradient(ellipse at 50% 40%,#12304a,#07131f 70%);text-align:center}
+.guide-figure{position:relative;flex:1 1 auto;min-height:0;width:100%;display:flex;justify-content:center;align-items:center}
+#guide-art{max-width:min(78%,300px);max-height:100%;object-fit:contain;image-rendering:auto;filter:drop-shadow(0 6px 10px #000a)}
+#guide-art.is-icon{width:40%;max-width:150px;opacity:.9}
+.guide-count{position:absolute;right:8%;top:4%;font-family:Georgia,serif;font-size:44px;color:#f1d395;text-shadow:0 2px 8px #000}
+.guide-copy{flex:0 0 auto}
+#guide-cue{display:block;font-size:20px;color:#f1d395;letter-spacing:.05em;font-family:"Hiragino Mincho ProN","Yu Mincho",serif}
+.guide-copy p{margin:3px 0 0;font-size:12px;line-height:1.5;color:#dfe6e3}
+#guide-phone:before{content:"スマホ：";color:#9fe3e8}
+.guide-panel[data-phase=countdown] .guide-copy p{display:none}
+.guide-panel[data-phase=countdown] #guide-cue{font-size:26px}
+.guide-panel[data-phase=countdown] #guide-art{animation:guide-breathe 1s ease-in-out infinite}
+@keyframes guide-breathe{50%{transform:scale(1.04)}}
+@media(prefers-reduced-motion:reduce){.guide-panel[data-phase=countdown] #guide-art{animation:none}}
+@media(max-height:650px){#guide-cue{font-size:17px}.guide-copy p{font-size:11px}.guide-count{font-size:34px}}
