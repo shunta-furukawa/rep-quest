@@ -212,3 +212,31 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 @keyframes guide-frame-a{0%{opacity:1}50%{opacity:0}100%{opacity:0}}
 @keyframes guide-frame-b{0%{opacity:0}50%{opacity:1}100%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.guide-panel.is-moving #guide-art,.guide-panel.is-moving[data-phase=countdown] #guide-art{animation:none;opacity:1}.guide-panel.is-moving #guide-art-2{animation:none;opacity:0}}
+
+/* v0.14 technique lineages: picker in the pre-set guide, full lineage sheet. */
+.tech-picker{flex:0 0 auto;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;gap:2px 8px;width:100%;max-width:420px;padding:6px 8px;border:1px solid #b8995e66;background:#0b1a28e6}
+.tech-picker .icon-btn{min-width:36px;min-height:36px;padding:0;font-size:20px;color:#f1d395}
+.tech-picker .icon-btn:disabled{opacity:.25}
+.tech-current{min-width:0}
+#tech-name{display:block;font-size:15px;color:#f1d395;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"Hiragino Mincho ProN","Yu Mincho",serif}
+#tech-meta{display:block;font-size:10px;color:#b8c7cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#open-lineage{grid-column:1/-1;justify-self:center;font-size:11px;min-height:26px;padding:2px 8px}
+.guide-panel[data-phase=ready]{justify-content:flex-start;gap:4px}
+#lineage-dialog{width:min(480px,calc(100% - 32px));max-width:none;max-height:min(84dvh,720px);padding:18px;border:1px solid #b8995e99;background:#0b1a28;color:#e8d6b8;box-shadow:0 18px 50px #000a;overflow:auto}
+#lineage-dialog::backdrop{background:#020a10cc}
+#lineage-dialog .sheet-heading h2{margin:0;color:#f1d395}
+.lineage-note{font-size:12px;line-height:1.7;color:#b8c7cc;margin:0 0 12px}
+.lineage-body{display:grid;gap:16px}
+.lineage h3{margin:0 0 6px;font-size:16px;color:#9fe3e8}
+.lineage-steps{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:step}
+.lineage-steps li{counter-increment:step;position:relative;padding:6px 8px 6px 34px;border:1px solid #a9855033;background:#0c1d28}
+.lineage-steps li:before{content:counter(step);position:absolute;left:8px;top:7px;width:18px;height:18px;border:1px solid #e3bc7688;border-radius:50%;display:grid;place-items:center;font-size:10px;color:#f1d395}
+.lineage-steps strong{display:block;font-size:13px;color:#e8d6b8}
+.lineage-steps small{display:block;font-size:10px;color:#9fb3bb;margin-top:2px}
+.lineage-steps p{margin:4px 0 0;font-size:11px;line-height:1.6;color:#b8c7cc}
+.lineage-steps li.current{border-color:#f1d395;background:#f1d3950f}
+.lineage-steps li.current strong{color:#f1d395}
+.lineage-steps li.locked{opacity:.55}
+#gallery-lineage{width:100%;margin-top:6px}
+@media(max-height:650px){#tech-name{font-size:13px}.tech-picker{padding:3px 6px}#open-lineage{min-height:22px}}
+#lineage-dialog .sheet-heading{position:sticky;top:-18px;z-index:1;margin:-18px -18px 10px;padding:14px 18px 10px;background:#0b1a28;border-bottom:1px solid #a9855033}

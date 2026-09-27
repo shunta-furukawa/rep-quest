@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BESTIARY, BONUS, CHAPTER_BOSSES, FAMILIES, REGION_POOLS, chooseFamily, fullBodyProgress, validateMotivation, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
+import { BESTIARY, BONUS, TUNING, CHAPTER_BOSSES, FAMILIES, REGION_POOLS, chooseFamily, fullBodyProgress, validateMotivation, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
 import { bossState } from '../public/battle.js';
 import { progress } from '../public/engine.js';
 import { createCharacter, emptyStore, newActive, creditAmount, commitActive, validateStore } from '../public/storage.js';
@@ -237,15 +237,71 @@ test('map regions report visited, cleared, current and next through the first lo
   assert.equal(regionState(5, 0).next, true); // from the summit the road leads back into the depths
   assert.deepEqual(regionState(6, 3), { visited: true, cleared: true, current: false, next: false, depth: 1 });
 });
-test('every exercise has a guide whose cues pace the countdown: 3s standing, 5s on the floor', async () => {
-  const { GUIDE, countdownOf, cueAt } = await import('../public/guide.js');
+test('every technique has a guide whose cues pace the countdown: 3s standing, 5s on the floor', async () => {
+  const { PHONE, guideFor, countdownOf, cueAt } = await import('../public/guide.js');
+  const { LINEAGES } = await import('../public/techniques.js');
   const { MODES } = await import('../public/engine.js');
-  assert.deepEqual(Object.keys(GUIDE).sort(), Object.keys(MODES).sort());
-  for (const [mode, g] of Object.entries(GUIDE)) {
-    assert.ok(g.phone && g.form && g.cues.every(c => c.length <= 10), mode);
-    assert.equal(countdownOf(mode), MODES[mode].timer ? 5 : 3, mode);
+  assert.deepEqual(Object.keys(PHONE).sort(), Object.keys(MODES).sort());
+  for (const [mode, ladder] of Object.entries(LINEAGES)) for (const t of ladder) {
+    const g = guideFor(t.id);
+    assert.ok(g.phone && g.form && g.cues.every(c => c.length <= 10), t.id);
+    assert.equal(countdownOf(t.id), MODES[mode].timer ? 5 : 3, t.id);
   }
-  assert.equal(cueAt('pushup', 0), GUIDE.pushup.cues[0]);
-  assert.equal(cueAt('pushup', 1999), GUIDE.pushup.cues[1]);
-  assert.equal(cueAt('pushup', 9000), GUIDE.pushup.cues.at(-1));
+  assert.equal(cueAt('pushup', 0), guideFor('pushup').cues[0]);
+  assert.equal(cueAt('pushup', 1999), guideFor('pushup').cues[1]);
+  assert.equal(cueAt('pushup', 9000), guideFor('pushup').cues.at(-1));
+});
+test('lineages are complete, ordered by difficulty, and start from the standard technique', async () => {
+  const { LINEAGES, standardIndex, techOf, isUnlocked, MASTERY_SETS } = await import('../public/techniques.js');
+  const { MODES } = await import('../public/engine.js');
+  assert.deepEqual(Object.keys(LINEAGES).sort(), Object.keys(MODES).sort());
+  const ids = Object.values(LINEAGES).flat().map(t => t.id);
+  assert.equal(new Set(ids).size, ids.length); assert.equal(ids.length, 28);
+  for (const [mode, ladder] of Object.entries(LINEAGES)) {
+    assert.equal(ladder[standardIndex(mode)].id, mode);
+    assert.equal(ladder[standardIndex(mode)].weight, 1);
+    for (let i = 1; i < ladder.length; i++) assert.ok(ladder[i].weight > ladder[i - 1].weight, `${mode} ${ladder[i].id}`);
+    for (const t of ladder) { assert.ok(t.range.min > 0 && t.range.max > t.range.min, t.id); assert.equal(techOf(t.id).mode, mode); }
+    assert.equal(isUnlocked({}, mode, standardIndex(mode)), true);
+    assert.equal(isUnlocked({}, mode, standardIndex(mode) + 1), false);
+    assert.equal(isUnlocked({ [mode]: MASTERY_SETS }, mode, standardIndex(mode) + 1), true);
+  }
+});
+test('harder techniques deal and earn more per rep, and mastering the top of the range unlocks the next', () => {
+  const s = make(); ensureMotivation(s, '2026-09-01');
+  assert.equal(s.tech.pushup.current, 'pushup');
+  const set = (tech, amount, h) => { s.active = newActive('pushup', new Date(2026, 8, 1, h), s.job, tech); creditAmount(s.active, amount, new Date(2026, 8, 1, h)); const base = commitActive(s); return { base, report: resolveSet(s, s.history[0], () => 1) }; };
+  let { base, report } = set('pushup', 15, 9);
+  assert.equal(base, 150); assert.ok(report.lines.some(l => l.text.includes('習得の証 1/2')));
+  ({ base, report } = set('pushup', 15, 10));
+  assert.deepEqual(report.unlocked, { id: 'pushup-wide', name: 'ワイド腕立て伏せ' });
+  assert.ok(report.lines.some(l => l.xp === BONUS.technique)); assert.equal(s.tech.pushup.current, 'pushup-wide');
+  ({ base, report } = set('pushup-knee', 10, 11));
+  assert.equal(base, 60); assert.equal(report.damage, 6); assert.equal(s.history[0].tech, 'pushup-knee');
+  assert.equal(s.techBest['pushup-knee'], 10); assert.equal(s.techBest.pushup, 15);
+  check(s);
+});
+test('boss HP stops at the cap, and older bosses above it are brought down to it', () => {
+  const s = make(); ensureMotivation(s, '2026-09-01');
+  s.bosses.pushup = { max: 60, hp: 45, count: 30, family: 'slime', element: 0, rare: false };
+  ensureMotivation(s, '2026-09-01');
+  assert.equal(s.bosses.pushup.max, TUNING.pushup.cap); assert.equal(s.bosses.pushup.hp, TUNING.pushup.cap);
+  s.active = newActive('pushup', new Date(2026, 8, 1, 9), s.job, 'pushup'); creditAmount(s.active, 25, new Date(2026, 8, 1, 9)); commitActive(s);
+  resolveSet(s, s.history[0], () => 1);
+  assert.equal(s.bosses.pushup.max, TUNING.pushup.cap);
+  check(s);
+});
+test('older saves start on the standard technique and a best at its top earns one mastery set', () => {
+  const s = make(); s.best = { pushup: 30, squat: 5, plank: 0, superman: 0 };
+  ensureMotivation(s, '2026-09-01');
+  assert.deepEqual(s.tech.pushup, { current: 'pushup', mastery: { pushup: 1 } });
+  assert.deepEqual(s.tech.squat, { current: 'squat', mastery: {} });
+  assert.equal(s.techBest.pushup, 30);
+  check(s);
+  const bad = JSON.parse(JSON.stringify(s)); bad.tech.pushup.current = 'pushup-onearm'; assert.throws(() => check(bad));
+  const alien = JSON.parse(JSON.stringify(s)); alien.tech.pushup.mastery['squat-pistol'] = 1; assert.throws(() => check(alien));
+});
+test('techniques read from a lineage and by id are the same, with their exercise and position', async () => {
+  const { LINEAGES, techOf } = await import('../public/techniques.js');
+  for (const [mode, ladder] of Object.entries(LINEAGES)) ladder.forEach((t, i) => { assert.equal(t.index, i); assert.equal(t.mode, mode); assert.equal(techOf(t.id), t); });
 });

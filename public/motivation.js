@@ -1,5 +1,6 @@
 import { MODES, localDate } from './engine.js';
 import { grantJobXp, validJob } from './progression.js';
+import { LINEAGES, MASTERY_SETS, damageOf, isUnlocked, ladderOf, standardIndex, techOf } from './techniques.js';
 
 // Per-mode bosses, personal bests, rested XP, a daily request and drops.
 // Bonus XP is recorded per day as `bonus`, so daily and job totals stay consistent.
@@ -48,8 +49,10 @@ export function dexStats(dex = {}) {
   return { found, total: BESTIARY.length, defeats, rares };
 }
 export const RARE_DROP = '星のかけら';
-export const TUNING = { pushup: { min: 5, step: 1, quest: 10 }, squat: { min: 8, step: 1, quest: 15 }, plank: { min: 20, step: 5, quest: 30 }, superman: { min: 15, step: 5, quest: 30 } };
-export const BONUS = { boss: 50, best: 30, quest: 100, fullBody: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };
+// Boss HP is in damage (reps or seconds × technique weight) and stops growing at `cap`:
+// past that, load rises by harder techniques rather than ever more reps.
+export const TUNING = { pushup: { min: 5, step: 1, quest: 10, cap: 20 }, squat: { min: 8, step: 1, quest: 15, cap: 25 }, plank: { min: 20, step: 5, quest: 30, cap: 75 }, superman: { min: 15, step: 5, quest: 30, cap: 55 } };
+export const BONUS = { boss: 50, best: 30, quest: 100, technique: 150, fullBody: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };
 export const CHAPTER_BOSSES = 3;
 export const REGIONS = [
   ['はじまりの森', '森の奥へ、一歩ずつ。'], ['風渡りの高原', '風を背に、次の場所へ。'], ['霧の湖畔', '見えない先も、進めば晴れる。'],
@@ -69,8 +72,9 @@ export function bossOf(slot, mode) {
   return { ...foe, level: b.count + 1, hp: b.hp, max: b.max, isNew: !slot.dex?.[foe.id] };
 }
 export function makeQuest(slot, day) {
-  const mode = KEYS[hash(day + slot.createdAt) % KEYS.length], t = TUNING[mode];
-  const target = Math.max(t.quest, Math.round((slot.best[mode] || 0) * 1.2 / t.step) * t.step);
+  // The day's request asks for about one and a half sets at the top of the current technique's range.
+  const mode = KEYS[hash(day + slot.createdAt) % KEYS.length], t = TUNING[mode], tech = techOf(slot.tech?.[mode]?.current || mode);
+  const target = Math.max(t.quest, Math.round(tech.range.max * 1.5 / t.step) * t.step);
   return { day, mode, target, done: false };
 }
 // A rest day is any fully elapsed local day without XP; the pool pays out as doubled XP.
@@ -101,6 +105,19 @@ export function ensureMotivation(slot, today = localDate(), except = null) {
       if (wins) { const id = monster(family).id; slot.dex[id] = (slot.dex[id] || 0) + wins; }
     });
   }
+  // Technique progress: every exercise starts on its standard technique. A mode best already at the
+  // top of the standard range counts as one mastery set toward the next technique.
+  slot.tech ??= {};
+  slot.techBest ??= {};
+  for (const m of KEYS) {
+    if (!slot.tech[m]) {
+      const std = ladderOf(m)[standardIndex(m)];
+      slot.tech[m] = { current: m, mastery: slot.best[m] >= std.range.max ? { [m]: 1 } : {} };
+    }
+    slot.techBest[m] ??= slot.best[m];
+    const b = slot.bosses[m], cap = TUNING[m].cap;
+    if (b.max > cap) { b.hp = Math.min(b.hp, cap); b.max = cap; }
+  }
   slot.items ??= {};
   slot.rest ??= { pool: 0, day: Object.keys(slot.daily).filter(k => k <= today).sort().at(-1) ?? today };
   accrueRest(slot, today);
@@ -130,20 +147,22 @@ export function chapterOf(slot) {
 export function resolveSet(slot, row, rng = Math.random) {
   const { mode, amount } = row, key = localDate(new Date(row.date)), unit = MODES[mode].unit, t = TUNING[mode];
   ensureMotivation(slot, key, row);
+  const tech = techOf(row.tech || mode), damage = damageOf(tech.id, amount);
   const job = validJob(row.job) ? row.job : slot.job;
   const report = { mode, amount, lines: [], bonus: 0, drops: [], chapterUp: false };
   const add = (xp, text) => { report.bonus += xp; report.lines.push({ text, xp }); };
-  const before = chapterOf(slot).chapter, prev = previous(slot, mode, row)?.amount;
+  const before = chapterOf(slot).chapter, prev = slot.history.find(r => r !== row && r.mode === mode && (r.tech || r.mode) === tech.id)?.amount;
 
   const boss = slot.bosses[mode], foe = bossOf(slot, mode);
   report.boss = { id: foe.id, name: foe.name, sprite: foe.sprite, rare: foe.rare, level: foe.level, max: boss.max, hp: boss.hp };
-  if (amount >= boss.hp) {
-    const over = amount - boss.hp, next = Math.max(boss.max, amount) + t.step;
+  report.damage = damage;
+  if (damage >= boss.hp) {
+    const over = damage - boss.hp, next = Math.min(t.cap, Math.max(boss.max, damage) + t.step);
     Object.assign(boss, { max: next, hp: next, count: boss.count + 1 });
     report.boss.defeated = true; row.boss = true;
     add(BONUS.boss, `${foe.name} Lv.${foe.level}を撃破！`);
     if (foe.rare) { add(BONUS.rare, 'レア個体の撃破ボーナス'); report.drops.push(RARE_DROP); }
-    if (over) add(Math.floor(over * MODES[mode].xp / 2), `オーバーキル +${over}${unit}`);
+    if (over) add(Math.floor(over * MODES[mode].xp / 2), `オーバーキル +${over}ダメージ`);
     report.drops.push(foe.drop);
     if (!slot.dex[foe.id]) { report.boss.discovered = true; add(0, `図鑑に登録：${foe.name}（${Object.keys(slot.dex).length + 1}/${BESTIARY.length}）`); }
     slot.dex[foe.id] = (slot.dex[foe.id] || 0) + 1;
@@ -154,23 +173,39 @@ export function resolveSet(slot, row, rng = Math.random) {
     report.next = upcoming;
     if (upcoming.rare) add(0, `次の相手はレア個体：${upcoming.name}が現れた！`);
   } else {
-    boss.hp -= amount;
+    boss.hp -= damage;
     report.boss.remaining = boss.hp;
     add(0, `${foe.name}は逃げ出した。残りHP ${boss.hp} を次回に持ち越し`);
   }
 
-  const best = slot.best[mode] || 0;
+  // Bests and comparisons are per technique; the mode best keeps the largest raw set of any technique.
+  slot.best[mode] = Math.max(slot.best[mode] || 0, amount);
+  const best = slot.techBest[tech.id] || 0;
   if (amount > best) {
-    slot.best[mode] = amount;
-    if (best) add(BONUS.best, `自己ベスト更新！ ${best} → ${amount}${unit}`);
-    else add(0, `はじめての記録：${amount}${unit}`);
+    slot.techBest[tech.id] = amount;
+    if (best) add(BONUS.best, `自己ベスト更新！ ${tech.name} ${best} → ${amount}${unit}`);
+    else add(0, `はじめての記録：${tech.name} ${amount}${unit}`);
   }
-  report.best = slot.best[mode];
+  report.best = slot.techBest[tech.id];
   if (prev !== undefined) {
     report.previous = prev;
     if (amount > prev) add(0, `前回比 +${amount - prev}${unit}`);
     else if (amount === prev) add(0, '前回と同じだけ、しっかり継続');
     else if (amount < best) add(0, `自己ベスト ${best}${unit} まで、あと ${best - amount}${unit}`);
+  }
+
+  // Mastery: sets at the top of the range. Enough of them unlock the next technique and switch to it.
+  const progress = slot.tech[mode], ladder = ladderOf(mode), next = ladder[tech.index + 1];
+  report.tech = { id: tech.id, name: tech.name };
+  if (amount >= tech.range.max) {
+    const count = progress.mastery[tech.id] = (progress.mastery[tech.id] || 0) + 1;
+    if (count < MASTERY_SETS) add(0, `${tech.name} 習得の証 ${count}/${MASTERY_SETS}（${tech.range.max}${unit}以上）`);
+    else if (count === MASTERY_SETS && next) {
+      progress.current = next.id; report.unlocked = { id: next.id, name: next.name };
+      add(BONUS.technique, `新しい技を習得：${next.name}`);
+    } else if (count === MASTERY_SETS) add(BONUS.technique, `${tech.name}を極めた！ ${MODES[mode].name}の系譜を完全習得`);
+  } else if (next && !isUnlocked(progress.mastery, mode, tech.index + 1)) {
+    add(0, `次の技まで：${tech.range.max}${unit}以上を あと${MASTERY_SETS - (progress.mastery[tech.id] || 0)}セット`);
   }
 
   const rested = Math.min(slot.rest.pool, row.xp);
@@ -215,6 +250,15 @@ export function validateMotivation(s) {
   if (s.dex !== undefined && (!record(s.dex) || Object.entries(s.dex).some(([k, v]) => !BESTIARY.some(e => e.id === k) || !integer(v, 1e7)))) bad();
   if (s.rest !== undefined && (!record(s.rest) || !integer(s.rest.pool, BONUS.restCap) || !dateKey(s.rest.day))) bad();
   if (s.fullBody !== undefined && !dateKey(s.fullBody)) bad();
+  if (s.tech !== undefined) {
+    if (!record(s.tech)) bad();
+    for (const [m, p] of Object.entries(s.tech)) {
+      if (!MODES[m] || !record(p) || techOf(p.current)?.mode !== m || !record(p.mastery)) bad();
+      if (!isUnlocked(p.mastery, m, techOf(p.current).index)) bad();
+      if (Object.entries(p.mastery).some(([id, n]) => techOf(id)?.mode !== m || !integer(n, 1e7))) bad();
+    }
+  }
+  if (s.techBest !== undefined && (!record(s.techBest) || Object.entries(s.techBest).some(([id, n]) => !techOf(id) || !integer(n, 1e7)))) bad();
   if (s.quest !== undefined && (!record(s.quest) || !dateKey(s.quest.day) || !MODES[s.quest.mode] || !integer(s.quest.target, 1e7) || typeof s.quest.done !== 'boolean')) bad();
   if (s.items !== undefined && (!record(s.items) || Object.entries(s.items).some(([k, v]) => k.length > 20 || !integer(v, 1e7)))) bad();
 }

@@ -1,6 +1,7 @@
 import { ensureJobs, grantJobXp, validJob } from './progression.js';
 import { MODES, localDate, validateSave } from './engine.js';
 import { validateMotivation } from './motivation.js';
+import { techOf, xpOf } from './techniques.js';
 
 export const STORAGE_KEY = 'rep-quest:v2';
 export const LEGACY_KEY = 'rep-quest:v1';
@@ -25,17 +26,17 @@ export function createCharacter(name, hair, now = new Date()) {
   if (!name || name.length > 16 || !hairValues.includes(hair)) throw new Error('Invalid character');
   return { job: 'sword', jobs: { sword: 0, mage: 0, rogue: 0 }, name, hair, configured: true, createdAt: now.toISOString(), xp: 0, sets: 0, history: [], daily: {}, undatedXp: 0 };
 }
-function addDaily(slot, mode, amount, key) {
+function addDaily(slot, mode, amount, key, tech = mode) {
   const day = slot.daily[key] ??= emptyDay();
   const entry = day.byMode[mode] ??= { amount: 0, xp: 0 };
-  const xp = amount * MODES[mode].xp;
+  const xp = xpOf(tech, amount);
   entry.amount += amount;
   entry.xp += xp;
   day.xp += xp;
 }
-export function newActive(mode, now = new Date(), job = 'sword') {
-  if (!MODES[mode]) throw new Error('Unknown mode');
-  return { job, mode, amount: 0, days: {}, startedAt: now.toISOString(), lastAt: now.toISOString() };
+export function newActive(mode, now = new Date(), job = 'sword', tech = mode) {
+  if (!MODES[mode] || techOf(tech)?.mode !== mode) throw new Error('Unknown mode');
+  return { job, mode, tech, amount: 0, days: {}, startedAt: now.toISOString(), lastAt: now.toISOString() };
 }
 // Attribute each newly earned whole second/rep to its local date, even across midnight.
 export function creditAmount(active, amount, now = new Date()) {
@@ -64,12 +65,15 @@ export function commitActive(slot) {
   if (!a) return 0;
   delete slot.active;
   if (!a.amount) return 0;
-  const xp = a.amount * MODES[a.mode].xp;
+  // Older active sets have no technique; they were the standard one.
+  const tech = a.tech || a.mode;
+  // XP is weighted per day so the daily totals add up exactly to the set's XP.
+  const xp = Object.values(a.days).reduce((sum, n) => sum + xpOf(tech, n), 0);
   grantJobXp(slot, xp, a.job || slot.job || 'sword');
   slot.xp += xp;
   slot.sets++;
-  for (const [key, amount] of Object.entries(a.days)) addDaily(slot, a.mode, amount, key);
-  slot.history.unshift({ mode: a.mode, amount: a.amount, xp, date: a.lastAt, job: a.job || slot.job || 'sword' });
+  for (const [key, amount] of Object.entries(a.days)) addDaily(slot, a.mode, amount, key, tech);
+  slot.history.unshift({ mode: a.mode, tech, amount: a.amount, xp, date: a.lastAt, job: a.job || slot.job || 'sword' });
   slot.history = slot.history.slice(0, 100); // Daily aggregates are never truncated.
   return xp;
 }
@@ -119,6 +123,7 @@ function validateCharacter(s) {
   validateMotivation(s);
   for (const row of s.history) {
     if (!MODES[row.mode] || !integer(row.amount, 1e7) || !integer(row.xp) || !validTimestamp(row.date)) throw new Error('Invalid history');
+    if (row.tech !== undefined && techOf(row.tech)?.mode !== row.mode) throw new Error('Invalid history technique');
   }
   let total = s.undatedXp;
   for (const [key, day] of Object.entries(s.daily)) {
@@ -136,6 +141,7 @@ function validateCharacter(s) {
   if (s.active) {
     const a = s.active;
     if (a.job !== undefined && !validJob(a.job)) throw new Error('Invalid active job');
+    if (a.tech !== undefined && techOf(a.tech)?.mode !== a.mode) throw new Error('Invalid active technique');
     if (!MODES[a.mode] || !integer(a.amount, 1e7) || !validTimestamp(a.startedAt) || !validTimestamp(a.lastAt) || !a.days || typeof a.days !== 'object') throw new Error('Invalid active set');
     let amount = 0;
     for (const [key, n] of Object.entries(a.days)) {
