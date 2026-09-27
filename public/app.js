@@ -1,7 +1,7 @@
 import { renderBestiary } from './bestiary.js';
 import { createAppUpdates } from './updates.js';
 import { bossState, createBattle, defeats } from './battle.js';
-import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, resolveSet } from './motivation.js';
+import { BESTIARY, BONUS, CHAPTER_BOSSES, bossOf, chapterOf, ensureMotivation, fullBodyProgress, resolveSet } from './motivation.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -81,7 +81,7 @@ async function mountScene() {
     const profile = selectedProfile();
     if (profile) scene.setCharacter(profile);
     scene.setVisible(true);
-    scene.setMode(view === 'workout' && session?.state === 'running' && session.mode === 'plank' ? 'guard' : 'idle');
+    scene.setMode(view === 'workout' && session?.state === 'running' && MODES[session.mode].timer ? 'guard' : 'idle');
     if (view === 'result') scene.play('celebrate');
   } else {
     const emblem = document.createElement('img'); emblem.src = '/art/crest.svg'; emblem.width = 90; emblem.height = 110; emblem.alt = '';
@@ -238,12 +238,15 @@ function render() {
   $('journey-detail').textContent = `あと ${CHAPTER_BOSSES - c.progress} 体のボスを倒すと、次のエリアへ。`;
   const q = data.quest, qUnit = MODES[q.mode].unit, qDone = data.daily[q.day]?.byMode[q.mode]?.amount || 0;
   $('today-quest').textContent = q.done ? `依頼達成 ✓ ${MODES[q.mode].name} ${q.target}${qUnit}` : `今日の依頼：${MODES[q.mode].name} ${Math.min(qDone, q.target)}/${q.target}${qUnit} · +${BONUS.quest}XP`;
-  $('rest-note').textContent = data.rest.pool ? `休息ボーナス ${data.rest.pool}XP（XP2倍）` : '自分のペースで、1セットから';
+  const body = fullBodyProgress(data, localDate());
+  const bodyText = body.awarded ? '全身制覇 ✓' : `全身制覇 ${body.done.length}/${body.total}`;
+  $('rest-note').textContent = data.rest.pool ? `${bodyText} · 休息 ${data.rest.pool}XP（2倍）` : body.awarded ? bodyText : `${bodyText} · +${BONUS.fullBody}XP`;
   for (const el of document.querySelectorAll('[data-boss]')) {
     const b = bossOf(data, el.dataset.boss);
-    el.textContent = `${b.rare ? '★' : ''}${b.isNew ? 'NEW ' : ''}Lv.${b.level} ${b.name} · HP ${b.hp}/${b.max}${b.hp < b.max ? ' 持ち越し' : ''}`;
+    // HP comes first so the carried-over state survives truncation on narrow 2x2 tiles.
+    el.textContent = `HP ${b.hp}/${b.max}${b.hp < b.max ? ' 持ち越し' : ''} · ${b.rare ? '★' : ''}Lv.${b.level} ${b.name}${b.isNew ? ' NEW' : ''}`;
   }
-  for (const b of document.querySelectorAll('[data-mode]')) b.classList.toggle('is-request', b.dataset.mode === q.mode && !q.done);
+  for (const b of document.querySelectorAll('[data-mode]')) { b.classList.toggle('is-request', b.dataset.mode === q.mode && !q.done); b.classList.toggle('done-today', body.done.includes(b.dataset.mode)); }
   $('best-stats').replaceChildren(...Object.entries(MODES).map(([m, info]) => {
     const d = document.createElement('div'), label = document.createElement('small'), value = document.createElement('strong');
     label.textContent = info.name; value.textContent = `${data.best[m]}${info.unit}`; d.append(label, value); return d;
@@ -391,6 +394,7 @@ const instructions = {
   pushup: 'iPhoneを床の安定した場所に置き、下がったときに大きなカウント画面を顎などで軽くタッチ。膝つきでもOK。首を伸ばしたり、画面に強くぶつけたりしないでください。',
   squat: 'iPhoneを胸元で両手で持ち、しゃがんでから立ち上がります。開始後は1秒静止。うまく数えない場合は、一度止めて感度を調整してください。',
   plank: '開始後の3秒で姿勢を準備。肘とつま先で体を支え、無理のない時間でキープします。姿勢の自動判定はありません。休むときは一時停止してください。',
+  superman: 'iPhoneを顔の前の床に置き、うつ伏せで腕を前に伸ばします。開始後の3秒で準備し、両手と両脚を床から少し浮かせてキープ。首は反らさず目線は床へ。腰に痛みが出たら中止してください。姿勢の自動判定はありません。',
 };
 function setup(mode) {
   if (writeBlocked) return toast('別の画面の記録を読み込むため、再読み込みしてください。');
@@ -398,7 +402,7 @@ function setup(mode) {
   session = { mode, amount: 0, kills: 0, defeated: false, boss: bossOf(data, mode), state: 'ready', elapsed: 0, timer: null, detector: new RepDetector(Number($('sensitivity').value)), lastSensor: 0 };
   data.active = newActive(mode, new Date(), data.job); save();
   $('mode-title').textContent = MODES[mode].name;
-  $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST' }[mode];
+  $('mode-category').textContent = { pushup: 'STRENGTH QUEST', squat: 'POWER QUEST', plank: 'ENDURANCE QUEST', superman: 'GUARDIAN QUEST' }[mode];
   $('instructions').textContent = instructions[mode];
   $('squat-settings').hidden = mode !== 'squat'; $('sensitivity').disabled = false;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = 'クエストをはじめる';
@@ -476,12 +480,12 @@ function tick() {
       $('status').textContent = session.mode === 'pushup' ? 'ここを軽くタッチ' : session.mode === 'squat' ? '1秒静止してから、ゆっくり動こう' : '呼吸を止めず、自分のペースで';
       $('counter').disabled = session.mode !== 'pushup';
       $('sensor-status').textContent = session.mode === 'squat' ? 'センサー接続済み · ゆっくり1往復で1回' : '';
-      scene?.setMode(session.mode === 'plank' ? 'guard' : 'idle'); beep();
+      scene?.setMode(MODES[session.mode].timer ? 'guard' : 'idle'); beep();
     }
     return;
   }
   if (session.state !== 'running') return;
-  if (session.mode === 'plank') {
+  if (MODES[session.mode].timer) {
     const amount = Math.floor((session.elapsed + now - session.segment) / 1000);
     if (amount !== session.amount) { session.amount = amount; updateCount(); }
   }
@@ -489,7 +493,7 @@ function tick() {
 }
 function pause() {
   if (!session || !['running', 'countdown'].includes(session.state)) return;
-  if (session.state === 'running' && session.mode === 'plank') { session.elapsed += performance.now() - session.segment; session.amount = Math.floor(session.elapsed / 1000); updateCount(false); }
+  if (session.state === 'running' && MODES[session.mode].timer) { session.elapsed += performance.now() - session.segment; session.amount = Math.floor(session.elapsed / 1000); updateCount(false); }
   session.state = 'paused'; clearInterval(session.timer); releaseWake(); scene?.setMode('idle');
   $('counter').disabled = true; $('status').textContent = '一時停止中'; $('pause').hidden = true;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = '再開する'; $('sensitivity').disabled = false; persistActive();

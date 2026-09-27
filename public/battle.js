@@ -1,8 +1,9 @@
+import { MODES } from './engine.js';
 // Display-only combat: saved amounts remain actual reps or whole seconds.
 export function defeats(mode, amount) {
-  return mode === 'plank' ? Math.floor(amount / 5) : amount;
+  return MODES[mode].timer ? Math.floor(amount / 5) : amount;
 }
-// One boss per set. Each rep (or plank second) is one point of damage.
+// One boss per set. Each rep (or timed second) is one point of damage.
 export function bossState(boss, amount) {
   const dealt = Math.min(amount, boss.hp);
   return { hp: boss.hp - dealt, max: boss.max, defeated: amount >= boss.hp, overkill: Math.max(0, amount - boss.hp) };
