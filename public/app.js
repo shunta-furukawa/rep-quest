@@ -2,7 +2,8 @@ import { renderBestiary } from './bestiary.js';
 import { createAppUpdates } from './updates.js';
 import { bossState, createBattle, defeats } from './battle.js';
 import { BONUS, CHAPTER_BOSSES, NATIVES, REGIONS, bossOf, chapterOf, dexStats, ensureMotivation, fullBodyProgress, monster, resolveSet } from './motivation.js';
-import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf } from './story.js';
+import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf, regionState } from './story.js';
+import { renderWorldMap } from './worldmap.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -96,12 +97,12 @@ function show(next) {
   view = next;
   appUpdates?.refresh();
   document.body.dataset.view = next;
-  $('app-nav').hidden = !['home', 'gallery', 'dex', 'records', 'settings'].includes(next);
+  $('app-nav').hidden = !['home', 'map', 'gallery', 'dex', 'records', 'settings'].includes(next);
   for (const button of document.querySelectorAll('[data-screen]')) {
     if (button.dataset.screen === next) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  for (const id of ['slots', 'creator', 'home', 'workout', 'result', 'gallery', 'dex', 'records', 'settings']) $(id).hidden = id !== view;
+  for (const id of ['slots', 'creator', 'home', 'map', 'workout', 'result', 'gallery', 'dex', 'records', 'settings']) $(id).hidden = id !== view;
   $(next).scrollTop = 0;
   window.scrollTo(0, 0);
   mountScene();
@@ -194,9 +195,10 @@ $('character-form').onsubmit = event => {
 };
 // The story sheet: where the adventurer is, where the road leads, and the beacons relit so far.
 let pendingStory = false;
-function openStory(arrived = false) {
+function openStory(arrived = false, index = null) {
   const c = chapterOf(data), story = REGION_STORY[c.region], dest = destinationOf(c.chapter), depth = Math.floor(c.chapter / REGIONS.length);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  if (index !== null && index !== c.region) return openRegion(index, c.chapter, el);
   const sections = [];
   if (arrived && c.chapter > 0) sections.push(el('p', 'story-cleared', REGION_STORY[(c.chapter - 1) % REGION_STORY.length].cleared));
   const now = el('section', 'story-now');
@@ -218,7 +220,25 @@ function openStory(arrived = false) {
   $('story-dialog').showModal();
   $('story-body').scrollTop = 0;
 }
-$('journey-strip').onclick = () => openStory();
+// Another island from the map: its tale if visited, only a glimpse if not.
+function openRegion(index, chapter, el) {
+  const s = regionState(chapter, index), tale = REGION_STORY[index], [name, line] = REGIONS[index];
+  const section = el('section', 'story-now');
+  section.append(el('small', 'eyebrow', s.cleared ? '灯標を灯した地' : s.next ? '次の目的地' : '未踏の地'), el('h3', '', name));
+  if (s.visited) {
+    section.append(el('p', 'story-epithet', tale.title), el('p', '', tale.arrival));
+    if (s.cleared) section.append(el('p', 'story-cleared', tale.cleared));
+    section.append(el('p', 'story-natives', `この地の魔物：${NATIVES[index].map(f => { const m = monster(f, index); return data.dex[m.id] ? m.name : '？？？'; }).join('、')}`));
+  } else {
+    section.append(el('p', '', line), el('p', 'story-natives', s.next ? '今いる地の灯標を灯すと、ここへの道がひらける。' : 'まだ遠い地。灯標をたどって進もう。'));
+  }
+  $('story-title').textContent = 'アストラ群島';
+  $('story-body').replaceChildren(section);
+  $('story-dialog').showModal();
+  $('story-body').scrollTop = 0;
+}
+$('journey-strip').onclick = () => { render(); show('map'); };
+$('map-back').onclick = () => { render(); show('home'); };
 $('close-story').onclick = () => $('story-dialog').close();
 let deleteIndex = null;
 function askDelete(index) {
@@ -266,7 +286,10 @@ function render() {
   $('region-label').textContent = c.name;
   $('region-next').textContent = `${REGIONS[dest.region][0]}${dest.depth ? ` · 深層${dest.depth}` : ''}`;
   $('route').replaceChildren(...Array.from({ length: CHAPTER_BOSSES }, (_, i) => { const pip = document.createElement('i'); if (i < c.progress) pip.className = 'lit'; return pip; }));
-  $('journey-strip').setAttribute('aria-label', `現在地 ${c.name}、次の目的地 ${$('region-next').textContent}、灯標 ${c.progress}/${CHAPTER_BOSSES}。冒険の物語を開く`);
+  $('journey-strip').setAttribute('aria-label', `現在地 ${c.name}、次の目的地 ${$('region-next').textContent}、灯標 ${c.progress}/${CHAPTER_BOSSES}。世界地図を開く`);
+  const lit = c.chapter >= REGIONS.length ? REGIONS.length : c.chapter, depthNow = Math.floor(c.chapter / REGIONS.length);
+  $('map-summary').textContent = `灯した灯標 ${lit}/${REGIONS.length}${depthNow ? ` · 深層${depthNow}を探索中` : ''} · 累計撃破 ${dexStats(data.dex).defeats}体`;
+  renderWorldMap($('world-map'), { chapter: c.chapter, progress: c.progress, job: g.job, stage: g.stage, hair: data.hair, onSelect: i => openStory(false, i) });
   // Region backdrops are optional art; a missing file falls through to the guild background layered beneath.
   document.documentElement.style.setProperty('--region-art', `url('/art/regions/${REGION_STORY[c.region].id}.webp')`);
   const q = data.quest, qUnit = MODES[q.mode].unit, qDone = data.daily[q.day]?.byMode[q.mode]?.amount || 0;
@@ -572,7 +595,7 @@ function refreshDate() {
     if (selectedDay === currentDay) selectedDay = today;
     const old = currentDay; currentDay = today;
     if (old.slice(0, 7) !== today.slice(0, 7)) calendarDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    if (['home', 'dex', 'records', 'settings'].includes(view)) render();
+    if (['home', 'map', 'dex', 'records', 'settings'].includes(view)) render();
   }
 }
 setInterval(refreshDate, 30000);

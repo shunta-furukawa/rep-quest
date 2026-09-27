@@ -20,3 +20,16 @@ export function destinationOf(chapter) {
   const next = chapter + 1;
   return { region: next % REGION_STORY.length, depth: Math.floor(next / REGION_STORY.length) };
 }
+// Island positions on the world map, as percentages of a 3:4 portrait map (x from left, y from top).
+// The painted /art/world-map.webp must place each island at these points so the markers line up.
+export const MAP_POINTS = [[24, 84], [72, 74], [28, 57], [74, 42], [27, 27], [62, 10]];
+export function regionState(chapter, index) {
+  const depth = Math.floor(chapter / REGION_STORY.length), current = chapter % REGION_STORY.length;
+  return {
+    visited: depth > 0 || index <= current,
+    cleared: depth > 0 || index < current,
+    current: index === current,
+    next: index === (current + 1) % REGION_STORY.length,
+    depth,
+  };
+}

@@ -227,3 +227,13 @@ test('every region has a story and backdrop id, and the destination wraps into d
   assert.deepEqual(destinationOf(5), { region: 0, depth: 1 });
   assert.deepEqual(destinationOf(6), { region: 1, depth: 1 });
 });
+test('map regions report visited, cleared, current and next through the first loop and into the depths', async () => {
+  const { regionState, MAP_POINTS, REGION_STORY } = await import('../public/story.js');
+  assert.equal(MAP_POINTS.length, REGION_STORY.length);
+  assert.ok(MAP_POINTS.every(([x, y]) => x > 0 && x < 100 && y > 0 && y < 100));
+  assert.deepEqual(regionState(2, 1), { visited: true, cleared: true, current: false, next: false, depth: 0 });
+  assert.deepEqual(regionState(2, 2), { visited: true, cleared: false, current: true, next: false, depth: 0 });
+  assert.deepEqual(regionState(2, 3), { visited: false, cleared: false, current: false, next: true, depth: 0 });
+  assert.equal(regionState(5, 0).next, true); // from the summit the road leads back into the depths
+  assert.deepEqual(regionState(6, 3), { visited: true, cleared: true, current: false, next: false, depth: 1 });
+});

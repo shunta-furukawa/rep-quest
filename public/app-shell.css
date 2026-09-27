@@ -149,3 +149,36 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 .story-entry{margin-top:10px}
 .story-entry strong{font-size:12px;color:#e8d6b8}
 @media(max-height:650px){.journey-strip{padding:4px 8px}.journey-strip strong{font-size:12px}}
+
+/* v0.12 world map: painted art (optional) under live star veins, beacons and the adventurer. */
+#map{display:flex;flex-direction:column;gap:6px;padding:6px 0;overflow-y:auto}
+.map-top{display:flex;align-items:center;gap:12px}
+.map-top h1{margin:0;font-size:22px}
+.map-top .eyebrow{font-size:9px}
+#map-back{min-height:36px;padding:4px 0;font-size:11px;white-space:nowrap}
+.map-summary{margin:0;font-size:12px;color:#f1d395}
+.map-frame{flex:1;min-height:0;display:flex;justify-content:center;align-items:flex-start}
+.world-map{position:relative;aspect-ratio:3/4;width:min(100%,calc((100dvh - 260px) * .75));min-width:240px;border:1px solid #b8995e66;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 0,#f1d39522,transparent 45%),radial-gradient(ellipse at 30% 80%,#2c889d33,transparent 55%),linear-gradient(#0d2233,#081521)}
+.world-map.has-art{background:url('/art/world-map.webp') center/cover,#081521}
+.map-veins{position:absolute;inset:0;width:100%;height:100%}
+.vein{stroke:#7ce6ee33;stroke-width:.8;stroke-dasharray:1.5 1.5;vector-effect:non-scaling-stroke}
+.vein.lit{stroke:#9fe3e8;stroke-width:2;stroke-dasharray:none;filter:drop-shadow(0 0 3px #7ce6ee)}
+.vein.route{stroke:#f1d395;stroke-width:1.6;stroke-dasharray:4 3}
+.map-island{position:absolute;transform:translate(-50%,-50%);width:28%;aspect-ratio:1.4;border:0;background:none;padding:0;color:inherit;font:inherit;display:grid;place-items:center}
+.map-land{position:absolute;inset:18% 6% 22%;border-radius:48% 52% 45% 55%/55% 50% 50% 45%;background:radial-gradient(ellipse at 45% 35%,#3f7b62,#1f4a45 60%,#12302f);box-shadow:0 10px 0 -2px #3a2c24,0 14px 18px #000a}
+.world-map.has-art .map-land{display:none}
+.map-island.unvisited .map-land{filter:grayscale(.6) brightness(.55)}
+.map-beacon{position:relative;width:12px;height:12px;transform:rotate(45deg);border:1.5px solid #e3bc76aa;background:#0b1a28;z-index:1}
+.map-island.cleared .map-beacon{background:#f1d395;box-shadow:0 0 10px 3px #f1d395aa}
+.map-island.current .map-beacon{border-color:#f1d395;animation:beacon-pulse 1.8s ease-in-out infinite}
+.map-label{position:absolute;top:78%;left:50%;transform:translateX(-50%);white-space:nowrap;text-align:center;font-size:11px;font-weight:600;color:#e8d6b8;text-shadow:0 1px 3px #000,0 0 6px #000;font-family:"Hiragino Mincho ProN","Yu Mincho",serif}
+.map-label small{display:block;font-size:8px;font-weight:400;color:#9fb3bb;font-family:system-ui}
+.map-island.current .map-label{color:#f1d395}
+.map-island.next .map-label small{color:#9fe3e8}
+.map-island.unvisited .map-label{color:#8a9aa0}
+.map-hero{position:absolute;bottom:52%;left:50%;transform:translateX(-50%);width:34px;height:37px;image-rendering:pixelated;filter:drop-shadow(0 3px 3px #000c);z-index:2}
+.map-island:focus-visible{outline:2px solid #7ce6ee;outline-offset:2px}
+.map-note{margin:0;font-size:10px;text-align:center}
+@keyframes beacon-pulse{50%{box-shadow:0 0 0 5px #f1d39533,0 0 12px #f1d39588}}
+@media(prefers-reduced-motion:reduce){.map-island.current .map-beacon{animation:none}}
