@@ -4,6 +4,8 @@ import { bossState, createBattle, defeats } from './battle.js';
 import { BONUS, CHAPTER_BOSSES, NATIVES, REGIONS, bossOf, chapterOf, dexStats, ensureMotivation, fullBodyProgress, monster, resolveSet } from './motivation.js';
 import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf, regionState } from './story.js';
 import { renderWorldMap } from './worldmap.js';
+import { drawCard, pickHighlight, shareText, weeklyHighlight, weeklySummary } from './share.js';
+import { renderPortrait } from './sprites.js';
 import { countdownOf, cueAt, guideFor } from './guide.js';
 import { LINEAGES, MASTERY_SETS, damageOf, isUnlocked, ladderOf, switchAt, techOf } from './techniques.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
@@ -634,6 +636,35 @@ function say(text) {
   if (!store.sound || !('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.1; speechSynthesis.speak(u); } catch {}
 }
+// Share cards are drawn here before the share sheet opens, so the tap that shares keeps its user gesture.
+let lastHighlight = null, shareCard = null;
+async function renderShare() {
+  const h = shareCard.highlight, g = growth(data);
+  const hero = await renderPortrait(g.job, g.stage, data.hair).catch(() => null);
+  const blob = await drawCard(h, { backdrop: `/art/regions/${REGION_STORY[chapterOf(data).region].id}.webp`, hero, name: store.shareName ? data.name : '', date: new Date().toLocaleDateString('ja-JP') });
+  if (!blob || shareCard?.highlight !== h) return;
+  if (shareCard.url) URL.revokeObjectURL(shareCard.url);
+  Object.assign(shareCard, { blob, url: URL.createObjectURL(blob), file: new File([blob], `rep-quest-${localDate()}.png`, { type: 'image/png' }) });
+  $('share-preview').src = shareCard.url; $('share-save').href = shareCard.url; $('share-save').download = shareCard.file.name;
+  $('share-native').hidden = !navigator.canShare?.({ files: [shareCard.file] });
+}
+function openShare(highlight) {
+  shareCard = { highlight };
+  $('share-name').checked = Boolean(store.shareName);
+  $('share-preview').removeAttribute('src'); $('share-native').hidden = true;
+  $('share-dialog').showModal();
+  renderShare();
+}
+const shareUrl = () => location.origin + '/';
+$('share-result').onclick = () => lastHighlight && openShare(lastHighlight);
+$('share-week').onclick = () => openShare(weeklyHighlight(weeklySummary(data)));
+$('share-name').onchange = () => { store.shareName = $('share-name').checked; save(); renderShare(); };
+$('share-native').onclick = () => {
+  if (!shareCard?.file) return;
+  navigator.share({ files: [shareCard.file], text: `${shareText(shareCard.highlight)}\n${shareUrl()}` }).catch(() => {});
+};
+$('share-x').onclick = () => { if (shareCard) window.open(`https://x.com/intent/post?text=${encodeURIComponent(shareText(shareCard.highlight))}&url=${encodeURIComponent(shareUrl())}`, '_blank', 'noopener'); };
+$('close-share').onclick = () => $('share-dialog').close();
 function tick() {
   if (!session) return;
   const now = performance.now();
@@ -675,7 +706,7 @@ $('counter').addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 
 function finish() {
   if (!session) return;
   pause(); clearInterval(session.timer); releaseWake();
-  const { mode, amount } = session, before = progress(growth(data).xp).level, beforeGrowth=growth(data);
+  const { mode, amount } = session, before = progress(growth(data).xp).level, beforeGrowth=growth(data), chapterBefore = chapterOf(data);
   persistActive(); const base = commitActive(data), report = base ? resolveSet(data, data.history[0]) : null; save(); session = null;
   if (!amount) { render(); show('home'); return; }
   const after = progress(growth(data).xp).level, earned = base + report.bonus, unit = MODES[mode].unit;
@@ -695,6 +726,9 @@ function finish() {
   $('result-summary').textContent = `累計 ${data.xp.toLocaleString()} XP · ${data.sets} セット ／ ${JOBS[data.job].name} Lv. ${after}${storageOK ? ' · 自動保存しました' : ' · 保存できませんでした。バックアップしてください'}`;
   const g=growth(data);
   $('growth-reward').textContent = g.stage>beforeGrowth.stage ? `昇格！ ${g.title}になりました。新しい装備を身につけた！` : g.medals>beforeGrowth.medals ? `勲章を獲得！ ${JOBS[g.job].name}の成長が姿に刻まれました。` : `${JOBS[g.job].name} +${earned} XP · 次の${g.reward.name}まで ${Math.max(0,g.reward.xp-g.xp).toLocaleString()} XP`;
+  lastHighlight = report ? pickHighlight({ report, before: beforeGrowth, after: g, amount, cleared: chapterBefore.name, nextRegion: chapterOf(data).name }) : null;
+  $('share-result').hidden = !lastHighlight;
+  if (lastHighlight) $('share-result').textContent = `共有する：${lastHighlight.label}`;
   show('result'); beep(true);
 }
 $('finish').onclick = finish;

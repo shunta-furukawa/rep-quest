@@ -245,3 +245,16 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 .guide-panel[data-phase=ready] #guide-cue{display:none}
 @media(max-height:700px){.guide-panel[data-phase=ready] #guide-form{display:none}}
 .guide-figure{min-height:90px}
+
+/* v0.15 share cards */
+#share-dialog{width:min(480px,calc(100% - 32px));max-width:none;max-height:min(88dvh,720px);padding:18px;border:1px solid #b8995e99;background:#0b1a28;color:#e8d6b8;box-shadow:0 18px 50px #000a;overflow:auto}
+#share-dialog::backdrop{background:#020a10cc}
+#share-dialog .sheet-heading h2{margin:0;color:#f1d395}
+.share-preview{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#07131f;border:1px solid #a9855055}
+.share-name{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px}
+.share-actions{display:grid;gap:8px}
+.share-actions .primary,.share-actions .secondary{min-height:46px;width:100%}
+#share-save{justify-self:center;font-size:12px}
+.share-note{margin:10px 0 0;font-size:11px}
+.share-result{flex:0 0 auto;min-height:44px;padding:8px}
+.share-week{width:100%;min-height:40px;padding:6px;margin:4px 0 8px;font-size:13px}

@@ -23,6 +23,8 @@ function paint(c,image,row,frame,job,silhouette=false){const x=c.getContext('2d'
  // Unreached forms keep only their outline so the promotion itself stays a reveal.
  if(silhouette){x.globalCompositeOperation='source-in';x.fillStyle='#10283a';x.fillRect(0,0,W,H);x.globalCompositeOperation='source-over';}
  c.classList.toggle('is-silhouette',silhouette);}
+// A fully painted portrait canvas, for compositing into share cards.
+export async function renderPortrait(job,stage,hair){const c=canvas();paint(c,await atlas(job,hair),stage,0,job);return c;}
 export function portrait(job,stage,hair,label='',silhouette=false){
  const c=canvas();c.className='sprite-portrait';c.setAttribute('role','img');c.setAttribute('aria-label',label||(silhouette?'まだ見ぬ姿':JOBS[job].ranks[stage]));
  atlas(job,hair).then(image=>paint(c,image,stage,0,job,silhouette)).catch(()=>{c.setAttribute('aria-label','冒険者の画像を読み込めません');});return c;
