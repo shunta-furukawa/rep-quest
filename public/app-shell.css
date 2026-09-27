@@ -182,3 +182,8 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 .map-note{margin:0;font-size:10px;text-align:center}
 @keyframes beacon-pulse{50%{box-shadow:0 0 0 5px #f1d39533,0 0 12px #f1d39588}}
 @media(prefers-reduced-motion:reduce){.map-island.current .map-beacon{animation:none}}
+/* With painted islands, names sit in the reserved cloud band ~9% of map height below each beacon
+   (button height is 15% of the map; 104% of it clears the painted island), on a soft plate for legibility.
+   The map keeps at least 280px of width on short screens so the lowest name stays inside the frame. */
+.world-map.has-art .map-label{top:104%;padding:1px 7px 2px;background:#061220b8;border-radius:2px;box-shadow:0 0 8px #061220}
+.world-map{min-width:min(100%,280px)}
