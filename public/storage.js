@@ -41,7 +41,7 @@ export function newActive(mode, now = new Date(), job = 'sword') {
 export function creditAmount(active, amount, now = new Date()) {
   const delta = amount - active.amount;
   if (!integer(delta, 1e7)) throw new Error('Invalid increment');
-  if (active.mode === 'plank') {
+  if (MODES[active.mode].timer) {
     let remaining = delta;
     let end = now.getTime();
     while (remaining > 0) {

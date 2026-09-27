@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BESTIARY, BONUS, CHAPTER_BOSSES, FAMILIES, REGION_POOLS, chooseFamily, validateMotivation, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
+import { BESTIARY, BONUS, CHAPTER_BOSSES, FAMILIES, REGION_POOLS, chooseFamily, fullBodyProgress, validateMotivation, bossOf, chapterOf, ensureMotivation, resolveSet } from '../public/motivation.js';
 import { bossState } from '../public/battle.js';
 import { progress } from '../public/engine.js';
 import { createCharacter, emptyStore, newActive, creditAmount, commitActive, validateStore } from '../public/storage.js';
@@ -128,7 +128,7 @@ test('legacy family migration uses the frozen count % 3 rotation and is idempote
   }
   s.dex = { 'slime-0': 2, 'bat-rare': 1 };
   validateMotivation(s);ensureMotivation(s, '2026-09-01');
-  assert.deepEqual(Object.values(s.bosses).map(b => b.family), ['bat','golem','slime']);
+  assert.deepEqual(['pushup','squat','plank'].map(m => s.bosses[m].family), ['bat','golem','slime']);
   assert.deepEqual(s.dex, { 'slime-0': 2, 'bat-rare': 1 });
   const before=JSON.stringify(s);ensureMotivation(s, '2026-09-01');assert.equal(JSON.stringify(s),before);check(s);
 });
@@ -179,4 +179,33 @@ test('pre-dex backups backfill only the original three families even after many 
   delete s.dex;ensureMotivation(s,'2026-09-01');
   assert.deepEqual(s.dex,{'slime-0':6,'bat-0':5,'golem-0':4});
   assert.equal(s.bosses.pushup.family,'bat');assert.equal(s.bosses.squat.family,'golem');
+});
+test('superman is a timed exercise with its own boss, best and credited seconds', () => {
+  const s = make(); ensureMotivation(s, '2026-09-01');
+  assert.deepEqual(s.bosses.superman, { max: 15, hp: 15, count: 0, family: 'slime', element: 0, rare: false });
+  const { base, report } = workout(s, 'superman', 20, new Date(2026, 8, 1, 10));
+  assert.equal(base, 40); assert.equal(report.boss.defeated, true); assert.equal(s.best.superman, 20);
+  assert.equal(s.daily['2026-09-01'].byMode.superman.amount, 20);
+  check(s);
+});
+test('saves from before superman load, validate and gain the new exercise', () => {
+  const s = make(); ensureMotivation(s, '2026-09-01');
+  delete s.best.superman; delete s.bosses.superman;
+  check(s); // restoring an older backup must not be rejected
+  ensureMotivation(s, '2026-09-01');
+  assert.equal(s.best.superman, 0); assert.equal(s.bosses.superman.hp, 15); assert.equal(s.best.pushup, 0);
+  check(s);
+});
+test('doing every exercise on one day pays the full-body bonus once', () => {
+  const s = make(); const at = h => new Date(2026, 8, 1, h);
+  workout(s, 'pushup', 3, at(9)); workout(s, 'squat', 3, at(10)); workout(s, 'plank', 10, at(11));
+  assert.deepEqual(fullBodyProgress(s, '2026-09-01').done, ['pushup', 'squat', 'plank']);
+  let { report } = workout(s, 'superman', 10, at(12));
+  assert.ok(report.lines.some(l => l.xp === BONUS.fullBody)); assert.equal(fullBodyProgress(s, '2026-09-01').awarded, true);
+  ({ report } = workout(s, 'pushup', 3, at(13)));
+  assert.equal(report.lines.some(l => l.xp === BONUS.fullBody), false);
+  ({ report } = workout(s, 'superman', 5, new Date(2026, 8, 2, 9)));
+  assert.equal(report.lines.some(l => l.xp === BONUS.fullBody), false); assert.equal(fullBodyProgress(s, '2026-09-02').done.length, 1);
+  check(s);
+  const bad = JSON.parse(JSON.stringify(s)); bad.fullBody = 'yesterday'; assert.throws(() => check(bad));
 });

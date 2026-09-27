@@ -41,8 +41,8 @@ export function monster(family, element = 0, rare = false) {
 }
 export const BESTIARY = [...VARIANTS.flatMap((_, e) => FAMILIES.map(f => monster(f, e))), ...FAMILIES.map(f => monster(f, 0, true))];
 export const RARE_DROP = '星のかけら';
-export const TUNING = { pushup: { min: 5, step: 1, quest: 10 }, squat: { min: 8, step: 1, quest: 15 }, plank: { min: 20, step: 5, quest: 30 } };
-export const BONUS = { boss: 50, best: 30, quest: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };
+export const TUNING = { pushup: { min: 5, step: 1, quest: 10 }, squat: { min: 8, step: 1, quest: 15 }, plank: { min: 20, step: 5, quest: 30 }, superman: { min: 15, step: 5, quest: 30 } };
+export const BONUS = { boss: 50, best: 30, quest: 100, fullBody: 100, rare: 100, restPerDay: 100, restCap: 300, rareChance: 0.03, rareBoss: 0.1 };
 export const CHAPTER_BOSSES = 3;
 export const REGIONS = [
   ['はじまりの森', '森の奥へ、一歩ずつ。'], ['風渡りの高原', '風を背に、次の場所へ。'], ['霧の湖畔', '見えない先も、進めば晴れる。'],
@@ -77,7 +77,9 @@ function accrueRest(slot, today) {
 }
 // `except` is a just-committed row that must not count as past effort.
 export function ensureMotivation(slot, today = localDate(), except = null) {
-  slot.best ??= Object.fromEntries(KEYS.map(m => [m, Math.max(0, ...slot.history.filter(r => r !== except && r.mode === m).map(r => r.amount))]));
+  // Exercises added later are filled in per mode, so older saves gain them without losing their records.
+  slot.best ??= {};
+  for (const m of KEYS) slot.best[m] ??= Math.max(0, ...slot.history.filter(r => r !== except && r.mode === m).map(r => r.amount));
   slot.bosses ??= {};
   for (const m of KEYS) if (!slot.bosses[m]) {
     const hp = Math.max(TUNING[m].min, (previous(slot, m, except)?.amount || 0) + TUNING[m].step);
@@ -97,6 +99,11 @@ export function ensureMotivation(slot, today = localDate(), except = null) {
   accrueRest(slot, today);
   if (!slot.quest || slot.quest.day < today) slot.quest = makeQuest(slot, today);
   return slot;
+}
+// Every exercise done at least once on a day completes the full-body round, rewarded once per day.
+export function fullBodyProgress(slot, day) {
+  const done = KEYS.filter(m => (slot.daily[day]?.byMode[m]?.amount || 0) > 0);
+  return { done, total: KEYS.length, complete: done.length === KEYS.length, awarded: slot.fullBody === day };
 }
 export function grantBonus(slot, xp, job, key) {
   if (!xp) return;
@@ -168,6 +175,12 @@ export function resolveSet(slot, row, rng = Math.random) {
     add(BONUS.quest, `今日の依頼達成：${MODES[mode].name} ${q.target}${unit}`);
   }
 
+  const body = fullBodyProgress(slot, key);
+  if (body.complete && slot.fullBody !== key) {
+    slot.fullBody = key;
+    add(BONUS.fullBody, `全身制覇！ 今日は${KEYS.length}種目すべてこなした`);
+  }
+
   if (rng() < BONUS.rareChance) report.drops.push(RARE_DROP);
   for (const item of report.drops) slot.items[item] = (slot.items[item] || 0) + 1;
 
@@ -180,11 +193,13 @@ export function resolveSet(slot, row, rng = Math.random) {
 export function validateMotivation(s) {
   const bad = () => { throw new Error('Invalid motivation data'); };
   const record = v => v && typeof v === 'object' && !Array.isArray(v);
-  if (s.best !== undefined && (!record(s.best) || !KEYS.every(m => integer(s.best[m], 1e7)))) bad();
+  // A mode may be missing from saves made before it existed; ensureMotivation fills it in.
+  if (s.best !== undefined && (!record(s.best) || !KEYS.every(m => s.best[m] === undefined || integer(s.best[m], 1e7)))) bad();
   if (s.bosses !== undefined) {
     if (!record(s.bosses)) bad();
     for (const m of KEYS) {
       const b = s.bosses[m];
+      if (b === undefined) continue;
       if (!record(b) || !integer(b.max, 1e7) || !integer(b.hp, b.max) || b.hp < 1 || !integer(b.count, 1e7)) bad();
       if (b.family !== undefined && !FAMILIES.includes(b.family)) bad();
       if ((b.element !== undefined && !integer(b.element, REGIONS.length - 1)) || (b.rare !== undefined && typeof b.rare !== 'boolean')) bad();
@@ -192,6 +207,7 @@ export function validateMotivation(s) {
   }
   if (s.dex !== undefined && (!record(s.dex) || Object.entries(s.dex).some(([k, v]) => !BESTIARY.some(e => e.id === k) || !integer(v, 1e7)))) bad();
   if (s.rest !== undefined && (!record(s.rest) || !integer(s.rest.pool, BONUS.restCap) || !dateKey(s.rest.day))) bad();
+  if (s.fullBody !== undefined && !dateKey(s.fullBody)) bad();
   if (s.quest !== undefined && (!record(s.quest) || !dateKey(s.quest.day) || !MODES[s.quest.mode] || !integer(s.quest.target, 1e7) || typeof s.quest.done !== 'boolean')) bad();
   if (s.items !== undefined && (!record(s.items) || Object.entries(s.items).some(([k, v]) => k.length > 20 || !integer(v, 1e7)))) bad();
 }

@@ -1,4 +1,5 @@
-export const MODES={pushup:{name:'腕立て伏せ',unit:'回',xp:10},squat:{name:'スクワット',unit:'回',xp:10},plank:{name:'プランク',unit:'秒',xp:2}};
+// Timer modes count whole seconds; the others count reps.
+export const MODES={pushup:{name:'腕立て伏せ',unit:'回',xp:10},squat:{name:'スクワット',unit:'回',xp:10},plank:{name:'プランク',unit:'秒',xp:2,timer:true},superman:{name:'スーパーマン',unit:'秒',xp:2,timer:true}};
 // Each level costs 100 XP more than the last, capped at 500 so level-ups stay within reach.
 const levelCost=level=>Math.min((level+1)*100,500);
 export function progress(xp){let level=0,remaining=xp;while(remaining>=levelCost(level)){remaining-=levelCost(level);level++;}return{level,current:remaining,needed:levelCost(level)};}
