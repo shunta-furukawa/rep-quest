@@ -205,3 +205,10 @@ body:before{background:linear-gradient(#06111bc9,#06111bf5 85%),var(--region-art
 @media(prefers-reduced-motion:reduce){.guide-panel[data-phase=countdown] #guide-art{animation:none}}
 @media(max-height:650px){#guide-cue{font-size:17px}.guide-copy p{font-size:11px}.guide-count{font-size:34px}}
 .quest-icon img.is-painted{object-fit:contain;image-rendering:auto;filter:drop-shadow(0 1px 2px #0009)}
+/* Two-frame guides: the second frame sits exactly over the first; each shows for half of a 1.8s beat. */
+#guide-art-2{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:min(78%,300px);max-height:100%;object-fit:contain;filter:drop-shadow(0 6px 10px #000a);opacity:0}
+.guide-panel.is-moving #guide-art,.guide-panel.is-moving[data-phase=countdown] #guide-art{animation:guide-frame-a 1.8s steps(1,end) infinite}
+.guide-panel.is-moving #guide-art-2{animation:guide-frame-b 1.8s steps(1,end) infinite}
+@keyframes guide-frame-a{0%{opacity:1}50%{opacity:0}100%{opacity:0}}
+@keyframes guide-frame-b{0%{opacity:0}50%{opacity:1}100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.guide-panel.is-moving #guide-art,.guide-panel.is-moving[data-phase=countdown] #guide-art{animation:none;opacity:1}.guide-panel.is-moving #guide-art-2{animation:none;opacity:0}}

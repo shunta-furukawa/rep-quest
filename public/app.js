@@ -543,6 +543,12 @@ function showGuide(mode, phase) {
   const g = GUIDE[mode], art = $('guide-art');
   art.onerror = () => { art.onerror = null; art.src = `/art/${mode}.svg`; art.classList.add('is-icon'); };
   art.classList.remove('is-icon'); art.src = `/art/guide/${mode}.webp`; art.alt = `${MODES[mode].name}の構えとスマホの置き場所`;
+  // An optional second frame (/art/guide/<mode>-2.webp, the end of the movement) alternates with the first to show motion.
+  const second = $('guide-art-2'), frame = new Image();
+  second.hidden = true; $('guide-panel').classList.remove('is-moving');
+  frame.onload = () => { if ($('guide-panel').dataset.mode !== mode) return; second.src = frame.src; second.hidden = false; $('guide-panel').classList.add('is-moving'); };
+  frame.src = `/art/guide/${mode}-2.webp`;
+  $('guide-panel').dataset.mode = mode;
   $('guide-panel').dataset.phase = phase;
   $('guide-cue').textContent = phase === 'ready' ? `${MODES[mode].name}の準備` : g.cues[0];
   $('guide-phone').textContent = g.phone; $('guide-form').textContent = g.form;
