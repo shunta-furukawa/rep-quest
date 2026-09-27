@@ -1,0 +1,18 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><title>REP QUEST · 技の構え確認</title>
+<style>body{margin:16px;background:#24313c;color:#eee;font:14px system-ui}button{padding:10px;margin:6px}iframe{display:block;border:1px solid #789}h1{font-size:18px}</style>
+<h1>REP QUEST · 技の構え確認</h1>
+<button id="init">確認用の冒険者を作成（全技習得）</button>
+<button onclick="document.querySelector('iframe').width=375;document.querySelector('iframe').height=812">375 × 812</button>
+<button onclick="document.querySelector('iframe').width=320;document.querySelector('iframe').height=568">320 × 568</button>
+<iframe title="App viewport" src="about:blank" width="375" height="812"></iframe>
+<script type="module">
+import {emptyStore,createCharacter,STORAGE_KEY} from '/storage.js';
+import {ensureMotivation} from '/motivation.js';
+import {LINEAGES,MASTERY_SETS} from '/techniques.js';
+document.querySelector('#init').onclick=()=>{
+ const testStore=emptyStore(),testSlot=createCharacter('技の絵確認','#302824');ensureMotivation(testSlot);
+ for(const[mode,techniques]of Object.entries(LINEAGES)){testSlot.tech[mode].mastery=Object.fromEntries(techniques.map(t=>[t.id,MASTERY_SETS]));testSlot.tech[mode].current=techniques[0].id;}
+ testStore.slots[0]=testSlot;testStore.selected=0;localStorage.setItem(STORAGE_KEY,JSON.stringify(testStore));
+ document.querySelector('iframe').src='/';document.querySelector('#init').disabled=true;
+};
+</script></html>
