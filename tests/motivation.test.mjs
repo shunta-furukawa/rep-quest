@@ -237,3 +237,15 @@ test('map regions report visited, cleared, current and next through the first lo
   assert.equal(regionState(5, 0).next, true); // from the summit the road leads back into the depths
   assert.deepEqual(regionState(6, 3), { visited: true, cleared: true, current: false, next: false, depth: 1 });
 });
+test('every exercise has a guide whose cues pace the countdown: 3s standing, 5s on the floor', async () => {
+  const { GUIDE, countdownOf, cueAt } = await import('../public/guide.js');
+  const { MODES } = await import('../public/engine.js');
+  assert.deepEqual(Object.keys(GUIDE).sort(), Object.keys(MODES).sort());
+  for (const [mode, g] of Object.entries(GUIDE)) {
+    assert.ok(g.phone && g.form && g.cues.every(c => c.length <= 10), mode);
+    assert.equal(countdownOf(mode), MODES[mode].timer ? 5 : 3, mode);
+  }
+  assert.equal(cueAt('pushup', 0), GUIDE.pushup.cues[0]);
+  assert.equal(cueAt('pushup', 1999), GUIDE.pushup.cues[1]);
+  assert.equal(cueAt('pushup', 9000), GUIDE.pushup.cues.at(-1));
+});

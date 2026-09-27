@@ -4,6 +4,7 @@ import { bossState, createBattle, defeats } from './battle.js';
 import { BONUS, CHAPTER_BOSSES, NATIVES, REGIONS, bossOf, chapterOf, dexStats, ensureMotivation, fullBodyProgress, monster, resolveSet } from './motivation.js';
 import { DEPTH_NOTE, PROLOGUE, REGION_STORY, destinationOf, regionState } from './story.js';
 import { renderWorldMap } from './worldmap.js';
+import { GUIDE, countdownOf, cueAt } from './guide.js';
 import { JOBS, STAGES, ensureJobs, formVisibility, growth } from './progression.js';
 import { portrait } from './sprites.js';
 import { MODES, progress, localDate, RepDetector } from './engine.js';
@@ -469,6 +470,7 @@ function setup(mode) {
   $('unit').textContent = MODES[mode].unit;
   battle.reset(data.job, session.boss);
   $('status').textContent = '準備できたら、はじめよう'; $('sensor-status').textContent = '';
+  showGuide(mode, 'ready');
   $('counter').disabled = true;
   $('counter').setAttribute('aria-label', mode === 'pushup' ? '腕立てを1回カウント' : '運動のカウント');
   updateCount(false); show('workout');
@@ -510,6 +512,8 @@ window.addEventListener('devicemotion', motion);
 async function start() {
   if (!session || !['ready', 'paused'].includes(session.state) || writeBlocked) return;
   const current = session; unlockAudio(); $('start').disabled = true;
+  // Speaking inside the tap unlocks speech on iOS; later cues then play from the countdown timer.
+  say(GUIDE[current.mode].cues[0]);
   if (current.mode === 'squat') {
     try {
       if (!window.DeviceMotionEvent) throw new Error('unsupported');
@@ -523,19 +527,41 @@ async function start() {
   current.state = 'countdown'; keepAwake(); current.countdown = performance.now();
   current.detector = new RepDetector(Number($('sensitivity').value));
   $('sensitivity').disabled = true; $('start').hidden = true; $('pause').hidden = false;
-  $('finish').hidden = false; $('status').textContent = '準備 · 3';
+  $('finish').hidden = false; $('status').textContent = `準備 · ${countdownOf(current.mode)}`;
+  current.cueIndex = 0; showGuide(current.mode, 'countdown');
   $('sensor-status').textContent = current.mode === 'squat' ? 'センサー接続を確認中…' : '';
   current.timer = setInterval(tick, 100);
+}
+// Guide panel over the battle arena: the full setup card before starting, one big cue per second while counting down.
+function showGuide(mode, phase) {
+  const g = GUIDE[mode], art = $('guide-art');
+  art.onerror = () => { art.onerror = null; art.src = `/art/${mode}.svg`; art.classList.add('is-icon'); };
+  art.classList.remove('is-icon'); art.src = `/art/guide/${mode}.webp`; art.alt = `${MODES[mode].name}の構えとスマホの置き場所`;
+  $('guide-panel').dataset.phase = phase;
+  $('guide-cue').textContent = phase === 'ready' ? `${MODES[mode].name}の準備` : g.cues[0];
+  $('guide-phone').textContent = g.phone; $('guide-form').textContent = g.form;
+  $('guide-count').textContent = phase === 'countdown' ? countdownOf(mode) : '';
+  $('guide-panel').hidden = false;
+}
+function hideGuide() { $('guide-panel').hidden = true; }
+// Short spoken cues follow the sound setting; unsupported browsers simply stay silent.
+function say(text) {
+  if (!store.sound || !('speechSynthesis' in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.1; speechSynthesis.speak(u); } catch {}
 }
 function tick() {
   if (!session) return;
   const now = performance.now();
   if (session.state === 'countdown') {
-    const left = 3 - Math.floor((now - session.countdown) / 1000);
+    const left = countdownOf(session.mode) - Math.floor((now - session.countdown) / 1000);
     $('status').textContent = `準備 · ${Math.max(1, left)}`;
+    $('guide-count').textContent = Math.max(1, left);
+    // The first cue was spoken on tap; each later second speaks its own cue once.
+    const cueIndex = Math.floor((now - session.countdown) / 1000);
+    if (cueIndex !== session.cueIndex && cueIndex < countdownOf(session.mode)) { session.cueIndex = cueIndex; const cue = cueAt(session.mode, now - session.countdown); $('guide-cue').textContent = cue; say(cue); }
     if (left <= 0) {
       if (session.mode === 'squat' && now - session.lastSensor > 1500) { pause(); $('sensor-status').textContent = 'センサーの値が届いていません。許可・端末を確認して再開してください。'; return; }
-      session.state = 'running'; session.segment = now; session.detector.reset();
+      session.state = 'running'; session.segment = now; session.detector.reset(); hideGuide();
       $('status').textContent = session.mode === 'pushup' ? 'ここを軽くタッチ' : session.mode === 'squat' ? '1秒静止してから、ゆっくり動こう' : '呼吸を止めず、自分のペースで';
       $('counter').disabled = session.mode !== 'pushup';
       $('sensor-status').textContent = session.mode === 'squat' ? 'センサー接続済み · ゆっくり1往復で1回' : '';
@@ -553,7 +579,7 @@ function tick() {
 function pause() {
   if (!session || !['running', 'countdown'].includes(session.state)) return;
   if (session.state === 'running' && MODES[session.mode].timer) { session.elapsed += performance.now() - session.segment; session.amount = Math.floor(session.elapsed / 1000); updateCount(false); }
-  session.state = 'paused'; clearInterval(session.timer); releaseWake(); scene?.setMode('idle');
+  session.state = 'paused'; clearInterval(session.timer); releaseWake(); scene?.setMode('idle'); window.speechSynthesis?.cancel(); showGuide(session.mode, 'ready');
   $('counter').disabled = true; $('status').textContent = '一時停止中'; $('pause').hidden = true;
   $('start').hidden = false; $('start').disabled = false; $('start').textContent = '再開する'; $('sensitivity').disabled = false; persistActive();
 }
